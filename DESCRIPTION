@@ -1,0 +1,19 @@
+Package: geo
+Title: Processing Geographical Data
+Version: 0.0.1
+Authors: 
+  person("Adam", "Rabinowitz", "adam.rabinowitz@beauclair.com", role = c("aut", "cre"))
+Description: Tools for processing geographical data.
+License: `use_gpl3_license()`
+Encoding: UTF-8
+RoxygenNote: 7.2.3
+Imports:
+  argparser,
+  dplyr,
+  readr,
+  sf,
+  stringr,
+  tidyr,
+  units,
+  utils,
+  yaml
