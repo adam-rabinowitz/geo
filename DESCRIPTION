@@ -1,6 +1,6 @@
 Package: geo
 Title: Processing Geographical Data
-Version: 0.0.1
+Version: 0.0.2
 Authors: 
   person("Adam", "Rabinowitz", "adam.rabinowitz@beauclair.com", role = c("aut", "cre"))
 Description: Tools for processing geographical data.

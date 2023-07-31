@@ -13,6 +13,9 @@ generate_postcode_outputs(postcodes, yaml_path, dist_breaks)
 
 \item{dist_breaks}{Breaks for calculating distance. Must have 'm' units}
 }
+\value{
+A list containing postcode tables and postcode plot data
+}
 \description{
 Function generates postcode tables and postcode plot data
 }

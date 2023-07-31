@@ -2,7 +2,7 @@
 % Please edit documentation in R/postcodes.R
 \name{find_postcode_distance_bins}
 \alias{find_postcode_distance_bins}
-\title{Find proximal postcodes}
+\title{Find postcode distance bins}
 \usage{
 find_postcode_distance_bins(postcodes, ref_postcodes, dist_breaks)
 }
@@ -12,6 +12,9 @@ find_postcode_distance_bins(postcodes, ref_postcodes, dist_breaks)
 \item{ref_postcodes}{Reference postcodes from which distance will be calculated}
 
 \item{dist_breaks}{Distance breaks used to generate distance bins}
+}
+\value{
+binned postcode distances
 }
 \description{
 Find distance range of postcodes to reference postcodes

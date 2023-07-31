@@ -15,6 +15,9 @@ create_plot_data(postcodes, postcode_list, area_yaml, dist_breaks)
 
 \item{dist_breaks}{Breaks for calculating distance. Must have 'm' units}
 }
+\value{
+Returns plot data in format for postcode app
+}
 \description{
 Create data for plotting in area app
 }

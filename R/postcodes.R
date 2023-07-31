@@ -32,7 +32,6 @@ read_ons_postcodes <- function(
 #' @param geojson geojson string or path to geojson file
 #' @param input_crs input coordinate reference system
 #' @return simple feature collection containing polygons
-#' @export
 # Read geojson
 read_geojson_polygon <- function(
   geojson, input_crs
@@ -54,7 +53,6 @@ read_geojson_polygon <- function(
 #'
 #' @param postcodes Simple feature object containing postcodes
 #' @param regx Regx pattern to search for in column
-#' @export
 # Filter postcodes by regular expression
 filter_postcodes_regx <- function(
   postcodes, regex
@@ -78,7 +76,6 @@ filter_postcodes_regx <- function(
 #' @param postcodes sf object containing postcodes
 #' @param point point from which to measure distance
 #' @param max_distance unit object listing maximum distance
-#' @export
 filter_postcodes_distance <- function(
   postcodes, point, max_distance
 ) {
@@ -103,7 +100,6 @@ filter_postcodes_distance <- function(
 #' 
 #' @param postcodes Simple feature object containing postcodes
 #' @param polygon Simple feature collection containing single polygon
-#' @export
 filter_postcodes_polygon <- function(
   postcodes, polygon    
 ) {
@@ -424,13 +420,14 @@ get_yaml_postcode_list <- function(
   return(postcode_list)
 }
 
-#' Find proximal postcodes
+#' Find postcode distance bins
 #' 
 #' Find distance range of postcodes to reference postcodes
 #' 
 #' @param postcodes Query postcodes for which distances will be calculated
 #' @param ref_postcodes Reference postcodes from which distance will be calculated
 #' @param dist_breaks Distance breaks used to generate distance bins
+#' @return binned postcode distances
 find_postcode_distance_bins <- function(
   postcodes, ref_postcodes, dist_breaks
 ) {
@@ -476,6 +473,7 @@ find_postcode_distance_bins <- function(
 #' @param postcode_list Named list of ONS postcodes for each area
 #' @param area_yaml Portion of YAML file used to generate postcode list
 #' @param dist_breaks Breaks for calculating distance. Must have 'm' units
+#' @return Returns plot data in format for postcode app
 create_plot_data <- function(
   postcodes, postcode_list, area_yaml, dist_breaks
 ) {
@@ -533,6 +531,8 @@ create_plot_data <- function(
 #' @param postcodes ONS postcodes
 #' @param yaml_path Path to YAML defining areas
 #' @param dist_breaks Breaks for calculating distance. Must have 'm' units
+#' @returns A list containing postcode tables and postcode plot data
+#' @export
 generate_postcode_outputs <- function(
   postcodes, yaml_path, dist_breaks
 ) {
