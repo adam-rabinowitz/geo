@@ -1,0 +1,7 @@
+geo.Rproj
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Rprofile
+renv/
