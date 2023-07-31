@@ -475,7 +475,7 @@ find_postcode_distance_bins <- function(
 #' @param postcodes All ONS postcodes
 #' @param postcode_list Named list of ONS postcodes for each area
 #' @param area_yaml Portion of YAML file used to generate postcode list
-#' @param dist_breaks Distance breaks used to generate distance bins
+#' @param dist_breaks Breaks for calculating distance. Must have 'm' units
 create_plot_data <- function(
   postcodes, postcode_list, area_yaml, dist_breaks
 ) {
@@ -532,7 +532,7 @@ create_plot_data <- function(
 #' 
 #' @param postcodes ONS postcodes
 #' @param yaml_path Path to YAML defining areas
-#' @param dist
+#' @param dist_breaks Breaks for calculating distance. Must have 'm' units
 generate_postcode_outputs <- function(
   postcodes, yaml_path, dist_breaks
 ) {
