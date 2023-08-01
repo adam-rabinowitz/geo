@@ -13,7 +13,7 @@ read_ons_postcodes <- function(
   )
   # Filter terminated postcodes
   if (rm_terminated) {
-    postcodes <- dplyr::filter(postcodes, !base::is.na(doterm))
+    postcodes <- dplyr::filter(postcodes, base::is.na(doterm))
   }
   # Filter postcodes with no grid reference
   if (rm_nogrid) {
@@ -559,19 +559,20 @@ generate_postcode_outputs <- function(
   ) |>
     dplyr::bind_rows(.id = 'area_type')
   # Create plot data
-  plot_data <- list(
-    'retail' = create_plot_data(
-      postcodes = postcodes,
-      postcode_list = retail_postcodes,
-      area_yaml = yaml$retail_areas,
-      dist_breaks = dist_breaks
-    ),
-    'customer' = create_plot_data(
-      postcodes = postcodes,
-      postcode_list = customer_postcodes,
-      area_yaml = yaml$customer_areas,
-      dist_breaks = dist_breaks
-    )
+  plot_data <- list()
+  message('Getting proximal retail postcodes')
+  plot_data[['retail']] <-create_plot_data(
+    postcodes = postcodes,
+    postcode_list = retail_postcodes,
+    area_yaml = yaml$retail_areas,
+    dist_breaks = dist_breaks
+  )
+  message('Getting proximal customer postcodes')
+  plot_data[['customer']] <- create_plot_data(
+    postcodes = postcodes,
+    postcode_list = customer_postcodes,
+    area_yaml = yaml$customer_areas,
+    dist_breaks = dist_breaks
   )
   # Create output and return
   output <- list(
