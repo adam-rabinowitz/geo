@@ -108,7 +108,10 @@ filter_postcodes_polygon <- function(
   stopifnot(length(polygon) == 1)
   stopifnot(sf::st_crs(postcodes)[['input']] == sf::st_crs(polygon)[['input']])
   # Get postcodes
-  filtered_postcodes <- sf::st_filter(x = postcodes, y = polygon)
+  filtered_postcodes <- sf::st_filter(
+    x = dplyr::filter(postcodes, osgrdind < 9),
+    y = polygon
+  )
   return(filtered_postcodes)
 }
 
@@ -517,7 +520,7 @@ create_plot_data <- function(
   )
   # Add rest of GB and return
   plot_data[['Rest Of GB']] <- base::ifelse(
-    test = rowSums(area_distances[distance_filter, , drop = T] == 0) == 0,
+    test = rowSums(area_distances[distance_filter, , drop = F] == 0) == 0,
     yes = 0,
     no = Inf
   )
@@ -561,7 +564,7 @@ generate_postcode_outputs <- function(
   # Create plot data
   plot_data <- list()
   message('Getting proximal retail postcodes')
-  plot_data[['retail']] <-create_plot_data(
+  plot_data[['retail']] <- create_plot_data(
     postcodes = postcodes,
     postcode_list = retail_postcodes,
     area_yaml = yaml$retail_areas,
