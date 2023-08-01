@@ -66,13 +66,13 @@ if (base::is.null(args$out_prefix)) {
 }
 print(args)
 # Read in postcodes
-postcodes <- read_ons_postcodes(
+postcodes <- geo::read_ons_postcodes(
   path = args$postcode_path,
   rm_terminated = args$rm_terminated,
   rm_nogrid = args$rm_terminated
 )
 # Generate outputs
-outputs <- generate_postcode_outputs(
+outputs <- geo::generate_postcode_outputs(
   postcodes = postcodes,
   yaml_path = args$yaml_path,
   dist_breaks = units::as_units(args$dist_breaks, 'm')
