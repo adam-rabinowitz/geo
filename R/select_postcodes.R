@@ -237,14 +237,14 @@ get_laua_postcodes <- function(
   return(filtered_postcodes)
 }
 
-#' Get yaml list postcodes
+#' Get postcodes from definitions
 #' 
-#' Get list of postcodes from yaml file
+#' Get list of postcodes from list of definitions
 #' @param postcodes ONS postcodes
 #' @param definiton_list List of area definitions
 #' @return returns tibble of postcodes
 #' @export
-get_postcodes_from_list <- function(
+get_postcodes_from_definitions <- function(
   postcodes, definition_list
 ) {
   # Get list of postcodes
@@ -297,6 +297,6 @@ get_postcodes_from_list <- function(
 #   '~/beauclair/data/ONSPD/ONSPD_MAY_2023_UK/Data/ONSPD_MAY_2023_UK.csv.gz',
 #   rm_terminated = T, rm_nogrid = T
 # )
-# area_postcodes <- get_postcodes_from_list(
+# area_postcodes <- get_postcodes_from_definitions(
 #   postcodes = postcodes, definition_list = definition_list
 # )
