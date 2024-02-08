@@ -17,16 +17,18 @@ read_ons_postcodes <- function(
     if (rm_nogrid) {
       # Remove terminated and no grid
       postcodes <- readr::read_csv(
-        path, progress=F, col_types=readr::cols()
+        path, progress=F, col_types=readr::cols(),
+        col_select = c(pcds, doterm, osgrdind, oslaua, lat, long)
       ) |>
         dplyr::filter(
           base::is.na(doterm) &
-            osgrdind < 9
+          osgrdind < 9
         )
     } else {
       # Remove terminated
       postcodes <- readr::read_csv(
-        path, progress=F, col_types=readr::cols()
+        path, progress=F, col_types=readr::cols(),
+        col_select = c(pcds, doterm, osgrdind, oslaua, lat, long)
       ) |>
         dplyr::filter(
           base::is.na(doterm)
@@ -36,7 +38,8 @@ read_ons_postcodes <- function(
     if (rm_nogrid) {
       # Remove no grid
       postcodes <- readr::read_csv(
-        path, progress=F, col_types=readr::cols()
+        path, progress=F, col_types=readr::cols(),
+        col_select = c(pcds, doterm, osgrdind, oslaua, lat, long)
       ) |>
         dplyr::filter(
           osgrdind < 9
@@ -44,13 +47,14 @@ read_ons_postcodes <- function(
     } else {
       # Keep all
       postcodes <- readr::read_csv(
-        path, progress=F, col_types=readr::cols()
+        path, progress=F, col_types=readr::cols(),
+        col_select = c(pcds, doterm, osgrdind, oslaua, lat, long)
       )
     }
   }
   # Convert to sf and return
   postcodes <- sf::st_as_sf(
-    postcodes, coords = c('long', 'lat'), remove = FALSE, crs = 4326
+    postcodes, coords = c('long', 'lat'), remove = TRUE, crs = 4326
   )
   return(postcodes)
 }
@@ -63,7 +67,7 @@ read_ons_postcodes <- function(
 #' @return simple feature collection containing polygons
 # Read geojson
 read_geojson_polygon <- function(
-    geojson, input_crs, output_crs
+  geojson, input_crs, output_crs
 ) {
   # Read geojson, check geometry
   polygon <- sf::read_sf(geojson, drivers = 'GeoJSON')
@@ -76,6 +80,56 @@ read_geojson_polygon <- function(
   return(transformed_polygon)
 }
 
+#' Get selected postcodes
+#' 
+#' Get directly selected postcodes
+#' 
+#' @param postcodes ONS postcodes
+#' @param selected Character vector of postcodes
+#' @return sf object containing the selected postcodes
+get_selected_postcodes <- function(
+  postcodes, selected
+) {
+  # Check arguments
+  stopifnot('pcds' %in% colnames(postcodes))
+  stopifnot(!is.null(selected))
+  stopifnot(length(selected) > 0)
+  check_postcodes(selected, level = 'complete')
+  # Format postcodes
+  selected <- format_complete_postcodes(
+    selected, to_upper = F, replace_malformed = F, sort = F
+  )
+  # Process duplicated postcodes
+  if (any(base::duplicated(selected))) {
+    # Report duplicated postcodes
+    duplicate_selections <- base::unique(selected[base::duplicated(selected)])
+    duplicated_message <- paste0(
+      "The following selected postcodes are duplicated: '",
+      paste(duplicate_selections, collapse = "', '"), "'"
+    )
+    message(duplicated_message)
+    # Remove duplicates
+    selected <- base::unique(selected)
+  }
+  # Find postcodes
+  selected_indices <- base::match(selected, postcodes$pcds)
+  # Report missing postcodes
+  missing <- base::which(base::is.na(selected_indices))
+  if (length(missing) > 0) {
+    missing_message <- paste0(
+      "The following selected postcodes are missing: '",
+      paste(selected[missing], collapse="', '"), "'"
+    )
+    message(missing_message)
+  }
+  # Select postcodes and return
+  present_indices <- base::sort(
+    selected_indices[!is.na(selected_indices)]
+  )
+  selected_postcodes <- postcodes[present_indices,]
+  return(selected_postcodes)
+}
+
 #' Get regex postcodes
 #' 
 #' Get postcodes matching a regex definition
@@ -84,11 +138,12 @@ read_geojson_polygon <- function(
 #' @param definition_list A regex definition from yaml file
 #' @return sf object containing postcodes matching the regex
 get_regex_postcodes <- function(
-    postcodes, regex
+  postcodes, regex
 ) {
   # Check arguments
   stopifnot('pcds' %in% colnames(postcodes))
   stopifnot(base::class(regex) == 'character')
+  stopifnot(length(regex) >= 1)
   # Get postcodes for each regex
   postcode_list <- lapply(
     regex,
@@ -142,7 +197,7 @@ get_regex_postcodes <- function(
 #' @param units units of distance
 #' @return sf object containing postcodes within specified distance from point
 get_point_postcodes <- function(
-    postcodes, lat, long, crs, distance, units
+  postcodes, lat, long, crs, distance, units
 ) {
   # Check arguments
   stopifnot(sf::st_crs(postcodes)[['input']] == 'EPSG:4326')
@@ -212,6 +267,11 @@ get_polygon_postcodes <- function(
     y = polygon
   ) |>
     dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+  # Check postcodes and return
+  if (nrow(filtered_postcodes) == 0) {
+    stop('Polygon did not identify any postcodes')
+  }
+  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
 
@@ -234,6 +294,14 @@ get_laua_postcodes <- function(
     postcodes$oslaua == laua, , drop = FALSE
   ] |>
     dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+  # Check postcodes and return
+  if (nrow(filtered_postcodes) == 0) {
+    error_message <- paste0(
+      'No postcodes were identififed for the LAUA "', laua, '"'
+    )
+    stop(error_message)
+  }
+  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
 
@@ -241,53 +309,79 @@ get_laua_postcodes <- function(
 #' 
 #' Get list of postcodes from list of definitions
 #' @param postcodes ONS postcodes
-#' @param definiton_list List of area definitions
+#' @param definiton List of area definition
 #' @return returns tibble of postcodes
 #' @export
-get_postcodes_from_definitions <- function(
+get_postcodes_from_definition <- function(
+  postcodes, definition
+) {
+  # Get postcodes
+  if (is.null(definition$type)) {
+    stop('no type defined')
+  }
+  # Get directly defined postcodes
+  if (definition$type == 'postcodes') {
+    selected_postcodes <- get_selected_postcodes(
+      postcodes = postcodes,
+      selected = definition$postcodes
+    )
+  # Get postcodes defined by regex
+  } else if (definition$type == 'regex') {
+    selected_postcodes <- get_regex_postcodes(
+      postcodes = postcodes,
+      regex = definition$regex
+    )
+  # Get postcodes defined by point
+  } else if (definition$type == 'point') {
+    selected_postcodes <- get_point_postcodes(
+      postcodes = postcodes,
+      lat = definition$lat,
+      long = definition$long,
+      crs = definition$crs,
+      distance = definition$distance,
+      units = definition$units
+    )
+  # Get postcodes defined by polygon
+  } else if (definition$type == 'polygon') {
+    selected_postcodes <- get_polygon_postcodes(
+      postcodes = postcodes,
+      geojson = definition$geojson,
+      crs = definition$crs
+    )
+  # Get postcodes defined by laua
+  } else if (definition$type == 'laua') {
+    selected_postcodes <- get_laua_postcodes(
+      postcodes = postcodes,
+      laua = definition$laua
+    )
+  # Raise error for unknown definition type
+  } else (
+    stop(paste('unknown definition type:', definition$type))
+  )
+  return(selected_postcodes)
+}
+
+#' Get postcodes from definition list
+#' 
+#' Function to get postcodes from a list of definitions
+#' 
+#' @param postcodes sf object containing postcode points
+#' @param definiton_list List of area definitions
+#' @returns Simple feature collection of postcodes
+get_postcodes_from_definition_list <- function(
   postcodes, definition_list
 ) {
-  # Get list of postcodes
-  postcode_list <- base::lapply(
-    definition_list,
-    function(definition) {
-      # Check type defined
-      if (is.null(definition$type)) {
-        stop('no type defined')
-      }
-      # Get postcodes for each type
-      if (definition$type == 'regex') {
-        unique_postcodes <- get_regex_postcodes(
-          postcodes = postcodes,
-          regex = definition$regex
-        )
-      } else if (definition$type == 'point') {
-        unique_postcodes <- get_point_postcodes(
-          postcodes = postcodes,
-          lat = definition$lat,
-          long = definition$long,
-          crs = definition$crs,
-          distance = definition$distance,
-          units = definition$units
-        )
-      } else if (definition$type == 'polygon') {
-        unique_postcodes <- get_polygon_postcodes(
-          postcodes = postcodes,
-          geojson = definition$geojson,
-          crs = definition$crs
-        )
-      } else if (definition$type == 'laua') {
-        unique_postcodes <- get_laua_postcodes(
-          postcodes = postcodes,
-          laua = definition$laua
-        )
-      } else (
-        stop(paste('unknown definition type:', definition$type))
-      )
-      return(unique_postcodes)
-    }
-  )
-  return(postcode_list)
+  # Get list of postcodes from definitions
+  selected_postcodes <- list()
+  for (area in names(definition_list)) {
+    message(area)
+    # Get postcode from definition
+    selected_postcodes[[area]] <- get_postcodes_from_definition(
+      postcodes = postcodes,
+      definition = definition_list[[area]]
+    )
+  }
+  return(selected_postcodes)
 }
 
 # definition_list <- yaml::read_yaml(
