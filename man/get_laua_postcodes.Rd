@@ -9,7 +9,7 @@ get_laua_postcodes(postcodes, laua)
 \arguments{
 \item{postcodes}{sf object containing postcodes}
 
-\item{laua}{A local/unitary authority}
+\item{laua}{A character vector of local/unitary authorities}
 }
 \value{
 sf object containing postcodes matching the regex

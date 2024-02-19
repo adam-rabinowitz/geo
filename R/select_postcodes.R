@@ -126,7 +126,8 @@ get_selected_postcodes <- function(
   present_indices <- base::sort(
     selected_indices[!is.na(selected_indices)]
   )
-  selected_postcodes <- postcodes[present_indices,]
+  selected_postcodes <- postcodes[present_indices,] |>
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   return(selected_postcodes)
 }
 
@@ -181,7 +182,7 @@ get_regex_postcodes <- function(
   # Generate merged and sorted postcodes
   regex_postcodes <- postcode_list |>
     dplyr::bind_rows() |>
-    dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   return(regex_postcodes)
 }
 
@@ -228,7 +229,7 @@ get_point_postcodes <- function(
   filtered_postcodes <- osgrd_postcodes[
     distance <= max_distance, , drop = FALSE
   ] |>
-    dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
   stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
@@ -266,7 +267,7 @@ get_polygon_postcodes <- function(
     x = dplyr::filter(postcodes, postcodes$osgrdind < 9),
     y = polygon
   ) |>
-    dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
   if (nrow(filtered_postcodes) == 0) {
     stop('Polygon did not identify any postcodes')
@@ -280,27 +281,24 @@ get_polygon_postcodes <- function(
 #' Get postcodes contained within a local/unitary authority
 #' 
 #' @param postcodes sf object containing postcodes
-#' @param laua A local/unitary authority
+#' @param laua A character vector of local/unitary authorities
 #' @return sf object containing postcodes matching the regex
 get_laua_postcodes <- function(
   postcodes, laua
 ) {
   # Check arguments
   stopifnot('oslaua' %in% colnames(postcodes))
-  stopifnot(length(laua) == 1)
   stopifnot(class(laua) == 'character')
+  stopifnot(length(laua) >= 1)
+  stopifnot(!any(duplicated(laua)))
+  stopifnot(all(laua %in% postcodes$oslaua))
   # Get postcodes
   filtered_postcodes <- postcodes[
-    postcodes$oslaua == laua, , drop = FALSE
+    postcodes$oslaua %in% laua, , drop = FALSE
   ] |>
-    dplyr::arrange(stringr::str_order(pcds, numeric = TRUE))
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
-  if (nrow(filtered_postcodes) == 0) {
-    error_message <- paste0(
-      'No postcodes were identififed for the LAUA "', laua, '"'
-    )
-    stop(error_message)
-  }
+  stopifnot(nrow(filtered_postcodes) > 0)
   stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
