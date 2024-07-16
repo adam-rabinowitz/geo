@@ -54,6 +54,7 @@ perform_postcode_operations <- function(
   # Update postcode list and return
   for (area in names(operations)) {
     # Check area
+    message(area)
     stopifnot(!(area %in% names(postcode_list)))
     # Get and check operation
     operation <- operations[[area]]
@@ -151,7 +152,7 @@ generate_postcode_list <- function(
     lapply('[[', 'pcds')
   # Perform truncation if requested
   if (level != 'complete') {
-    initial_postcodes = lapply(
+    initial_postcodes <- lapply(
       initial_postcodes,
       truncate_postcodes,
       level = level,
@@ -217,7 +218,7 @@ generate_pull_data <- function(
     yaml$customer_areas$postcodes[c('path', 'rm_terminated', 'rm_nogrid')]
   )
   if (!identical_postcodes) {
-    all_postcodes <- read_pull_postcodes(
+    all_postcodes <- read_ons_postcodes(
       path = yaml$customer_areas$postcodes$path,
       rm_terminated = yaml$customer_areas$postcodes$rm_terminated,
       rm_nogrid = yaml$customer_areas$postcodes$rm_nogrid
@@ -229,7 +230,7 @@ generate_pull_data <- function(
     postcodes = all_postcodes,
     definitions = yaml$customer_areas$definitions,
     operations = yaml$customer_areas$operations,
-    area = yaml$customer_areas$pull,
+    areas = yaml$customer_areas$pull,
     level = yaml$customer_areas$postcodes$level
   )
   identify_postcode_overlap(customer_postcode_list, raise_error = FALSE)
@@ -309,91 +310,151 @@ get_postcode_polygons <- function(
     ),
     geometry = do.call(c, polygon_list)
   ) |>
-    sf::st_transform(crs)
+    sf::st_transform(crs) |>
+    dplyr::arrange(area)
   return(area_polygons)
 }
+
+#' #' Generate polygon plot data
+#' #' 
+#' #' Function generates postcode tables and postcode plot data
+#' #' 
+#' #' @param yaml_path Path to YAML defining areas
+#' #' @param voronoi_path Path to rds file containing postcode voronoi
+#' #' @param crs Coordinate reference system for output polygons
+#' #' @returns A list containing postcode tables and postcode plot data
+#' #' @export
+#' generate_polygon_plot_data <- function(
+#'   yaml_path, voronoi_path, crs
+#' ) {
+#'   # Read yaml
+#'   yaml <- yaml::read_yaml(yaml_path)
+#'   voronoi <- readRDS(voronoi_path)
+#'   # Read retail postcodes
+#'   message('reading retail postcodes')
+#'   if (!yaml$retail_areas$postcodes$rm_nogrid) {
+#'     warning('nogrid postcodes were requested but cannot be plotted')
+#'   }
+#'   all_postcodes <- read_ons_postcodes(
+#'     path = yaml$retail_areas$postcodes$path,
+#'     rm_terminated = yaml$retail_areas$postcodes$rm_terminated,
+#'     rm_nogrid = TRUE
+#'   )
+#'   stopifnot(all(voronoi$pcds %in% all_postcodes$pcds))
+#'   # Get retail postcodes
+#'   message('getting retail postcodes')
+#'   retail_postcode_list <- generate_postcode_list(
+#'     postcodes = all_postcodes,
+#'     definitions = yaml$retail_areas$definitions,
+#'     operations = yaml$retail_areas$operations,
+#'     areas = yaml$retail_areas$pull,
+#'     level = yaml$retail_areas$postcodes$level
+#'   )
+#'   identify_postcode_overlap(retail_postcode_list, raise_error = FALSE)
+#'   # Get retail voronoi
+#'   retail_polygons <- get_postcode_polygons(
+#'     postcode_list = retail_postcode_list,
+#'     voronoi = voronoi,
+#'     crs = crs
+#'   )
+#'   # Get customer postcodes
+#'   message('reading customer postcodes')
+#'   if (!yaml$customer_areas$postcodes$rm_nogrid) {
+#'     warning('nogrid postcodes were requested but cannot be plotted')
+#'   }
+#'   identical_postcodes <- base::identical(
+#'     yaml$retail_areas$postcodes[c('path', 'rm_terminated')],
+#'     yaml$customer_areas$postcodes[c('path', 'rm_terminated')]
+#'   )
+#'   if (!identical_postcodes) {
+#'     all_postcodes <- read_ons_postcodes(
+#'       path = yaml$customer_areas$postcodes$path,
+#'       rm_terminated = yaml$customer_areas$postcodes$rm_terminated,
+#'       rm_nogrid = TRUE
+#'     )
+#'     stopifnot(all(voronoi$pcds %in% all_postcodes$pcds))
+#'   }
+#'   # Get customer postcodes
+#'   message('getting customer postcodes')
+#'   customer_postcode_list <- generate_postcode_list(
+#'     postcodes = all_postcodes,
+#'     definitions = yaml$customer_areas$definitions,
+#'     operations = yaml$customer_areas$operations,
+#'     area = yaml$customer_areas$pull,
+#'     level = yaml$customer_areas$postcodes$level
+#'   )
+#'   identify_postcode_overlap(customer_postcode_list, raise_error = FALSE)
+#'   # Get customer polygons
+#'   customer_polygons <- get_postcode_polygons(
+#'     postcode_list = customer_postcode_list,
+#'     voronoi = voronoi,
+#'     crs = crs
+#'   )
+#'   # Generate postcode table and return
+#'   complete_polygons <- list(
+#'     'retail' = retail_polygons,
+#'     'customer' = customer_polygons
+#'   )
+#'   return(complete_polygons)
+#' }
 
 #' Generate polygon plot data
 #' 
 #' Function generates postcode tables and postcode plot data
 #' 
-#' @param yaml_path Path to YAML defining areas
+#' @param retail_path Path to file containing retail postcodes
+#' @param customer_path Path to file containing customer postcodes 
 #' @param voronoi_path Path to rds file containing postcode voronoi
 #' @param crs Coordinate reference system for output polygons
-#' @returns A list containing postcode tables and postcode plot data
+#' @returns A list containing polygons of customer and retail areas
 #' @export
 generate_polygon_plot_data <- function(
-  yaml_path, voronoi_path, crs
+  retail_path, customer_path, voronoi_path, crs
 ) {
-  # Read yaml
-  yaml <- yaml::read_yaml(yaml_path)
+  # Read data
+  retail_postcodes <- readr::read_csv(
+    retail_path, progress = FALSE, show_col_types = FALSE
+  )
+  customer_postcodes <- readr::read_csv(
+    customer_path, progress = FALSE, show_col_types = FALSE
+  )
   voronoi <- readRDS(voronoi_path)
-  # Read retail postcodes
-  message('reading retail postcodes')
-  if (!yaml$retail_areas$postcodes$rm_nogrid) {
-    warning('nogrid postcodes were requested but cannot be plotted')
-  }
-  all_postcodes <- read_ons_postcodes(
-    path = yaml$retail_areas$postcodes$path,
-    rm_terminated = yaml$retail_areas$postcodes$rm_terminated,
-    rm_nogrid = TRUE
+  # Check data
+  stopifnot(identical(
+    colnames(retail_postcodes),
+    c('project', 'city', 'postcode')
+  ))
+  stopifnot(identical(
+    colnames(customer_postcodes),
+    c('project', 'postcode', 'cityloc')
+  ))
+  stopifnot(length(unique(retail_postcodes$project)) == 1)
+  stopifnot(length(unique(customer_postcodes$project)) == 1)
+  stopifnot(retail_postcodes$project[1] == customer_postcodes$project[1])
+  # Generate postcode lists and voronoi
+  polygons <- list(
+    retail = split(
+      retail_postcodes$postcode,
+      factor(
+        retail_postcodes$city,
+        base::unique(retail_postcodes$city)
+      )
+    ) |>
+      get_postcode_polygons(
+        voronoi = voronoi, crs = crs
+      ),
+    customer = customer_list <- split(
+      customer_postcodes$postcode,
+      factor(
+        customer_postcodes$cityloc,
+        base::unique(customer_postcodes$cityloc)
+      )
+    ) |>
+      get_postcode_polygons(
+        voronoi = voronoi, crs = crs
+      )
   )
-  stopifnot(all(voronoi$pcds %in% all_postcodes$pcds))
-  # Get retail postcodes
-  message('getting retail postcodes')
-  retail_postcode_list <- generate_postcode_list(
-    postcodes = all_postcodes,
-    definitions = yaml$retail_areas$definitions,
-    operations = yaml$retail_areas$operations,
-    areas = yaml$retail_areas$pull,
-    level = yaml$retail_areas$postcodes$level
-  )
-  identify_postcode_overlap(retail_postcode_list, raise_error = FALSE)
-  # Get retail voronoi
-  retail_polygons <- get_postcode_polygons(
-    postcode_list = retail_postcode_list,
-    voronoi = voronoi,
-    crs = crs
-  )
-  # Get customer postcodes
-  message('reading customer postcodes')
-  if (!yaml$customer_areas$postcodes$rm_nogrid) {
-    warning('nogrid postcodes were requested but cannot be plotted')
-  }
-  identical_postcodes <- base::identical(
-    yaml$retail_areas$postcodes[c('path', 'rm_terminated')],
-    yaml$customer_areas$postcodes[c('path', 'rm_terminated')]
-  )
-  if (!identical_postcodes) {
-    all_postcodes <- read_ons_postcodes(
-      path = yaml$customer_areas$postcodes$path,
-      rm_terminated = yaml$customer_areas$postcodes$rm_terminated,
-      rm_nogrid = TRUE
-    )
-    stopifnot(all(voronoi$pcds %in% all_postcodes$pcds))
-  }
-  # Get customer postcodes
-  message('getting customer postcodes')
-  customer_postcode_list <- generate_postcode_list(
-    postcodes = all_postcodes,
-    definitions = yaml$customer_areas$definitions,
-    operations = yaml$customer_areas$operations,
-    area = yaml$customer_areas$pull,
-    level = yaml$customer_areas$postcodes$level
-  )
-  identify_postcode_overlap(customer_postcode_list, raise_error = FALSE)
-  # Get customer polygons
-  customer_polygons <- get_postcode_polygons(
-    postcode_list = customer_postcode_list,
-    voronoi = voronoi,
-    crs = crs
-  )
-  # Generate postcode table and return
-  complete_polygons <- list(
-    'retail' = retail_polygons,
-    'customer' = customer_polygons
-  )
-  return(complete_polygons)
+  return(polygons)
 }
 
 # # Create glasgow plot data

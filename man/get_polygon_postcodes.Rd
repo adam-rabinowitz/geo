@@ -4,12 +4,12 @@
 \alias{get_polygon_postcodes}
 \title{Get polygon postcodes}
 \usage{
-get_polygon_postcodes(postcodes, geojson, crs)
+get_polygon_postcodes(postcodes, coordinate_str, crs)
 }
 \arguments{
 \item{postcodes}{sf object containing postcodes}
 
-\item{geojson}{A geojson of a single polygon}
+\item{coordinate_str}{A string listing xy coordinates for polygon vertices}
 
 \item{crs}{Coordinate reference system of the polygon}
 }

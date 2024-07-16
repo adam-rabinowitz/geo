@@ -11,7 +11,7 @@ get_postcode_regex <- function(
   # Set elements of regex
   postcode_regex_elements <-c(
     'area' = '([A-Z]{1,2})',
-    'district' = '(\\d{1,2}[A-Z]?|(?<=NP)T|(?<=GI)R)',
+    'district' = '(\\d|\\d[A-Z]|\\d{2}|(?<=NP)T|(?<=GI)R)',
     'sector' = '\\s*(\\d)',
     'unit' = '([A-Z]{2})'
   )
@@ -169,7 +169,7 @@ order_postcodes <- function(
   )
   # Calculate order of elements
   element_rank <- apply(
-    X = element_matrix[, 2:ncol(element_matrix)],
+    X = element_matrix[, 2:ncol(element_matrix), drop = FALSE],
     MARGIN = 2, 
     FUN = stringr::str_rank,
     numeric = TRUE,
@@ -190,7 +190,7 @@ order_postcodes <- function(
 sort_postcodes <- function(
   postcodes, level = NULL
 ) {
-  # Sort psotcodes and return
+  # Sort postcodes and return
   postcode_order <- order_postcodes(postcodes, level = level)
   sorted_postcodes <- postcodes[postcode_order]
   return(sorted_postcodes)
