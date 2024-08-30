@@ -402,31 +402,23 @@ get_postcode_polygons <- function(
 #' 
 #' Function generates postcode tables and postcode plot data
 #' 
-#' @param retail_path Path to file containing retail postcodes
-#' @param customer_path Path to file containing customer postcodes 
-#' @param voronoi_path Path to rds file containing postcode voronoi
+#' @param retail_postcodes Table containg retail postcodes
+#' @param customer_postcodes Table containing customer postcodes
+#' @param voronoi Simple feature collection containing postcode voronoi
 #' @param crs Coordinate reference system for output polygons
 #' @returns A list containing polygons of customer and retail areas
 #' @export
 generate_polygon_plot_data <- function(
-  retail_path, customer_path, voronoi_path, crs
+  retail_postcodes, customer_postcodes, voronoi, crs
 ) {
-  # Read data
-  retail_postcodes <- readr::read_csv(
-    retail_path, progress = FALSE, show_col_types = FALSE
-  )
-  customer_postcodes <- readr::read_csv(
-    customer_path, progress = FALSE, show_col_types = FALSE
-  )
-  voronoi <- readRDS(voronoi_path)
   # Check data
   stopifnot(identical(
     colnames(retail_postcodes),
-    c('project', 'city', 'postcode')
+    c('project', 'area', 'postcode')
   ))
   stopifnot(identical(
     colnames(customer_postcodes),
-    c('project', 'postcode', 'cityloc')
+    c('project', 'area', 'postcode')
   ))
   stopifnot(length(unique(retail_postcodes$project)) == 1)
   stopifnot(length(unique(customer_postcodes$project)) == 1)
@@ -436,8 +428,8 @@ generate_polygon_plot_data <- function(
     retail = split(
       retail_postcodes$postcode,
       factor(
-        retail_postcodes$city,
-        base::unique(retail_postcodes$city)
+        retail_postcodes$area,
+        base::unique(retail_postcodes$area)
       )
     ) |>
       get_postcode_polygons(
@@ -446,8 +438,8 @@ generate_polygon_plot_data <- function(
     customer = customer_list <- split(
       customer_postcodes$postcode,
       factor(
-        customer_postcodes$cityloc,
-        base::unique(customer_postcodes$cityloc)
+        customer_postcodes$area,
+        base::unique(customer_postcodes$area)
       )
     ) |>
       get_postcode_polygons(
