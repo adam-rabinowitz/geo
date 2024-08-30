@@ -14,7 +14,7 @@ read_ons_postcodes <- function(
   stopifnot(base::length(rm_nogrid) == 1)
   # Select columns
   selected_columns <- c(
-    'pcds', 'doterm', 'osgrdind', 'oscty', 'oslaua', 'lat', 'long'
+    'pcds', 'doterm', 'osgrdind', 'oscty', 'oslaua', 'osward', 'lat', 'long'
   )
   # Create filter functions
   if (rm_terminated) {
@@ -272,88 +272,6 @@ get_point_postcodes <- function(
   return(filtered_postcodes)
 }
 
-#' #' Get polygon postcodes
-#' #' 
-#' #' Get postcodes contained with a geojson polygon
-#' #' 
-#' #' @param postcodes sf object containing postcodes
-#' #' @param geojson A geojson of a single polygon
-#' #' @param crs Coordinate reference system of the polygon
-#' #' @return sf object containing postcodes within the polygon
-#' get_polygon_postcodes <- function(
-#'   postcodes, geojson, crs
-#' ) {
-#'   # Check arguments
-#'   stopifnot(sf::st_crs(postcodes)[['input']] == 'EPSG:4326')
-#'   stopifnot('osgrdind' %in% colnames(postcodes))
-#'   stopifnot(length(geojson) == 1)
-#'   stopifnot(class(geojson) == 'character')
-#'   stopifnot(length(crs) == 1)
-#'   stopifnot(is.integer(crs))
-#'   stopifnot(sf::st_can_transform(src = crs, dst = 4326))
-#'   # Create polygon
-#'   polygon <- read_geojson_polygon(
-#'     geojson = geojson,
-#'     input_crs = crs,
-#'     output_crs = 4326
-#'   )
-#'   stopifnot(sf::st_geometry_type(polygon) == 'POLYGON')
-#'   stopifnot(length(polygon) == 1)
-#'   # Get postcodes
-#'   filtered_postcodes <- sf::st_filter(
-#'     x = dplyr::filter(postcodes, postcodes$osgrdind < 9),
-#'     y = polygon
-#'   ) |>
-#'     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
-#'   # Check postcodes and return
-#'   if (nrow(filtered_postcodes) == 0) {
-#'     stop('Polygon did not identify any postcodes')
-#'   }
-#'   stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
-#'   return(filtered_postcodes)
-#' }
-
-create_polygon_from_str <- function(
-  coordinate_str, crs    
-) {
-  # Check arguments
-  stopifnot(grepl('^\\[\\[-{0,1}\\d', coordinate_str))
-  stopifnot(grepl('\\d\\]\\]$', coordinate_str))
-  stopifnot(length(crs) == 1)
-  stopifnot(is.integer(crs))
-  # Convert coordinates to a vector of strings
-  coordinate_str_vector <- coordinate_str |>
-    gsub(pattern = '\\s+', replacement = '') |>
-    gsub(pattern = '^\\[+', replacement = '') |>
-    gsub(pattern = '\\]+$', replacement = '') |>
-    strsplit(split = '\\],\\[')
-  # Check first and last coordinates are identical
-  stopifnot(
-    identical(
-      head(coordinate_str_vector[[1]], 1),
-      tail(coordinate_str_vector[[1]], 1)
-    )
-  )
-  # Convert character vector of coordiantes to polygon
-  polygon <- coordinate_str_vector[[1]] |>
-    base::strsplit(split = ',') |>
-    base::lapply(as.numeric) |>
-    base::lapply(sf::st_point) |>
-    sf::st_sfc(crs = crs) |>
-    sf::st_combine() |>
-    sf::st_cast('LINESTRING') |>
-    sf::st_cast('POLYGON') |>
-    sf::st_transform(crs = crs) |>
-    sf::st_make_valid()
-  # Convert polygon crs to 4326
-  if (crs != 4326) {
-    polygon <- sf::st_transform(
-      polygon, crs = 4326
-    )
-  }
-  return(polygon)
-}
-
 #' Get polygon postcodes
 #' 
 #' Get postcodes contained with a geojson polygon
@@ -371,7 +289,8 @@ get_polygon_postcodes <- function(
   # Convert coordinates to a character vector
   polygon <- create_polygon_from_str(
     coordinate_str = coordinate_str,
-    crs = crs
+    in_crs = crs,
+    out_crs = 4326
   )
   # Get postcodes
   filtered_postcodes <- sf::st_filter(
@@ -386,6 +305,34 @@ get_polygon_postcodes <- function(
   stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
+
+#' Get ward postcodes
+#' 
+#' Get postcodes contained within a local/unitary authority
+#' 
+#' @param postcodes sf object containing postcodes
+#' @param wards A character vector of ward codes
+#' @return sf object containing postcodes within the selected wards
+get_ward_postcodes <- function(
+  postcodes, wards
+) {
+  # Check arguments
+  stopifnot('osward' %in% colnames(postcodes))
+  stopifnot(class(wards) == 'character')
+  stopifnot(length(wards) >= 1)
+  stopifnot(!any(duplicated(wards)))
+  stopifnot(all(wards %in% postcodes$osward))
+  # Get postcodes
+  filtered_postcodes <- postcodes[
+    postcodes$osward %in% wards, , drop = FALSE
+  ] |>
+    dplyr::arrange(order_postcodes(pcds, level = 'complete'))
+  # Check postcodes and return
+  stopifnot(nrow(filtered_postcodes) > 0)
+  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
+  return(filtered_postcodes)
+}
+
 
 #' Get laua postcodes
 #' 
@@ -491,6 +438,12 @@ get_postcodes_from_definition <- function(
       crs = definition$crs
     )
   # Get postcodes defined by laua
+  } else if (definition$type == 'wards') {
+    selected_postcodes <- get_ward_postcodes(
+      postcodes = postcodes,
+      wards = definition$wards
+    )
+  # Get postcodes defined by laua
   } else if (definition$type == 'laua') {
     selected_postcodes <- get_laua_postcodes(
       postcodes = postcodes,
@@ -533,12 +486,12 @@ get_postcodes_from_definition_list <- function(
 }
 
 # definition_list <- yaml::read_yaml(
-#   '~/beauclair/city_data/Glasgow/glasgow_regions.yaml'
-# )$retail_areas$definitions
+#   '~/beauclair/city_data/region_definitions/yaml_definitions/chester_regions.yaml'
+# )$customer_areas$definitions
 # postcodes <- read_ons_postcodes(
-#   '~/beauclair/data/ONSPD/ONSPD_MAY_2023_UK/Data/ONSPD_MAY_2023_UK.csv.gz',
+#   '~/beauclair/data/ONSPD/ONSPD_AUG_2023_UK/Data/ONSPD_AUG_2023_UK.csv.gz',
 #   rm_terminated = T, rm_nogrid = T
 # )
-# area_postcodes <- get_postcodes_from_definitions(
+# area_postcodes <- get_postcodes_from_definition_list(
 #   postcodes = postcodes, definition_list = definition_list
 # )
