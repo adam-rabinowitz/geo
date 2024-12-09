@@ -1,67 +1,52 @@
-#' Read ons postcodes
-#'
-#' Read ons postcode csv, filter and convert to sf object 
-#'
-#' @param path Paths to postcode CSV
-#' @export
-read_ons_postcodes <- function(
-  path, rm_terminated, rm_nogrid
+#' Read ons gb postcodes
+#' 
+#' Read GB postcodes in ONS postcode directory (ONSPD) file
+#' @param path Path to ONSPD file
+#' @param max_osgrdind Maximum allowable ONS grid reference quality indicator
+#' @param min_doterm Minimum date of termination allowed
+#' @return simple feature collection containing polygons
+read_ons_gb_postcodes <- function(
+  path, max_osgrdind, min_doterm, crs 
 ) {
   # Check arguments
-  stopifnot(base::is.logical(rm_terminated))
-  stopifnot(base::length(rm_terminated) == 1)
-  stopifnot(base::is.logical(rm_nogrid))
-  stopifnot(base::length(rm_nogrid) == 1)
-  # Select columns
-  selected_columns <- c(
-    'pcds', 'doterm', 'osgrdind', 'oscty', 'oslaua', 'osward', 'lat', 'long'
-  )
-  # Create filter functions
-  if (rm_terminated) {
-    doterm_filter <- function(doterm) {is.na(doterm)}
-  } else {
-    doterm_filter <- function(doterm) {rep(TRUE, length(doterm))}
-  }
-  if (rm_nogrid) {
-    # Added 99.9 latitude filter to deal with an edge case
-    osgrdind_filter <- function(osgrdind, lat) {osgrdind < 9 & lat < 99.9} 
-  } else {
-    osgrdind_filter <- function(osgrdind, lat) {rep(TRUE, length(osgrdind))}
-  }
-  # Remove terminated and no grid
-  postcodes <- readr::read_csv(
-    path, progress=F, col_types=readr::cols(),
-    col_select=dplyr::all_of(selected_columns)
+  stopifnot(base::length(max_osgrdind) == 1)
+  stopifnot((max_osgrdind %% 1) == 0)
+  stopifnot(max_osgrdind > 0)
+  stopifnot(length(min_doterm) == 1)
+  stopifnot(base::inherits(min_doterm, 'Date'))
+  stopifnot(base::length(crs) == 1)
+  stopifnot((crs %% 1) == 0)
+  stopifnot(sf::st_can_transform(27700, crs))
+  # Read ons postcodes and return
+  ons_gb_postcodes <- readr::read_csv(
+    path,
+    progress = FALSE,
+    col_types = readr::cols_only(
+      pcds = readr::col_character(),
+      dointr = readr::col_character(),
+      doterm = readr::col_character(),
+      osgrdind = readr::col_integer(),
+      oscty = readr::col_character(),
+      oslaua = readr::col_character(),
+      osward = readr::col_character(),
+      oseast1m = readr::col_integer(),
+      osnrth1m = readr::col_integer()
+    )
   ) |>
+    dplyr::mutate(
+      dointr = lubridate::as_date(dointr, format = '%Y%m'),
+      doterm = lubridate::as_date(doterm, format = '%Y%m')
+    ) |>
     dplyr::filter(
-      doterm_filter(doterm) &
-      osgrdind_filter(osgrdind, lat)
+      grepl('^(E|S|W)', oscty) &
+      osgrdind <= max_osgrdind &
+      (is.na(doterm) | doterm >= min_doterm)
     ) |>
     sf::st_as_sf(
-      coords = c('long', 'lat'), remove = TRUE, crs = 4326
-    )
-  return(postcodes)
-}
-
-#' Read geojson polygon
-#' 
-#' Read geojson polygon and convert to 4326 CRS
-#' @param geojson geojson string or path to geojson file
-#' @param input_crs input coordinate reference system
-#' @return simple feature collection containing polygons
-# Read geojson
-read_geojson_polygon <- function(
-  geojson, input_crs, output_crs
-) {
-  # Read geojson, check geometry
-  polygon <- sf::read_sf(geojson, drivers = 'GeoJSON')
-  stopifnot(sf::st_geometry_type(polygon) == 'POLYGON')
-  stopifnot(length(polygon) == 1)
-  # Transform geometry and return
-  base::suppressWarnings(sf::st_crs(polygon) <- input_crs)
-  stopifnot(sf::st_can_transform(src = input_crs, dst = output_crs))
-  transformed_polygon <- sf::st_transform(polygon, crs = output_crs)
-  return(transformed_polygon)
+      coords = c('oseast1m', 'osnrth1m'), remove = TRUE, crs = 27700
+    ) |>
+    sf::st_transform(crs = crs)
+  return(ons_gb_postcodes)
 }
 
 #' Get selected postcodes
@@ -75,7 +60,6 @@ get_selected_postcodes <- function(
   postcodes, selected
 ) {
   # Check arguments
-  stopifnot('pcds' %in% colnames(postcodes))
   stopifnot(!is.null(selected))
   stopifnot(length(selected) > 0)
   check_postcodes(selected, level = 'complete')
@@ -91,9 +75,7 @@ get_selected_postcodes <- function(
       "The following selected postcodes are duplicated: '",
       paste(duplicate_selections, collapse = "', '"), "'"
     )
-    message(duplicated_message)
-    # Remove duplicates
-    selected <- base::unique(selected)
+    stop(duplicated_message)
   }
   # Find postcodes
   selected_indices <- base::match(selected, postcodes$pcds)
@@ -104,7 +86,7 @@ get_selected_postcodes <- function(
       "The following selected postcodes are missing: '",
       paste(selected[missing], collapse="', '"), "'"
     )
-    message(missing_message)
+    stop(missing_message)
   }
   # Select postcodes and return
   present_indices <- base::sort(
@@ -115,9 +97,9 @@ get_selected_postcodes <- function(
   return(selected_postcodes)
 }
 
-#' Get selected postcodes
+#' Get selected sectors
 #' 
-#' Get directly selected postcodes
+#' Get directly selected postal sectors
 #' 
 #' @param postcodes ONS postcodes
 #' @param selected Character vector of postal sectors
@@ -126,7 +108,6 @@ get_selected_sectors <- function(
   postcodes, selected
 ) {
   # Check arguments
-  stopifnot('pcds' %in% colnames(postcodes))
   stopifnot(!is.null(selected))
   stopifnot(length(selected) > 0)
   check_postcodes(selected, level = 'sector')
@@ -138,9 +119,7 @@ get_selected_sectors <- function(
       "The following selected postal sectors are duplicated: '",
       paste(duplicate_selections, collapse = "', '"), "'"
     )
-    message(duplicated_message)
-    # Remove duplicates
-    selected <- base::unique(selected)
+    stop(duplicated_message)
   }
   # Find postcodes
   sector_list <- split(
@@ -154,7 +133,7 @@ get_selected_sectors <- function(
       "The following selected postal sectors are missing: '",
       paste(selected[missing], collapse="', '"), "'"
     )
-    message(missing_message)
+    stop(missing_message)
   }
   # Select postcodes
   present_indices <- selected_indices[!is.na(selected_indices)]
@@ -194,13 +173,11 @@ get_regex_postcodes <- function(
     base::sapply(postcode_list, base::nrow) == 0
   ]
   if (length(unproductive_regex) > 0) {
-    base::message(
-      base::paste0(
-        'The following regex were unproductive: "',
-        base::paste0(unproductive_regex, collapse = '", "'),
-        '"'
-      )
+    missing_message <- base::paste0(
+      'The following regex were unproductive: "',
+      base::paste0(unproductive_regex, collapse = '", "'), '"'
     )
+    stop(missing_message)
   }
   # Raise an error if redundant postcodes identified
   all_postcodes <- base::unlist(
@@ -208,13 +185,11 @@ get_regex_postcodes <- function(
   )
   unique_postcodes <- base::unique(all_postcodes)
   if (length(unique_postcodes) < length(all_postcodes)) {
-    stop(
-      base::paste0(
-        'The following regex identified duplicate postcodes: "',
-        base::paste(definition_list$regex, collapse = '", "'),
-        '"'
-      )
+    duplicate_message <- base::paste0(
+      'The following regex identified duplicate postcodes: "',
+      base::paste(definition_list$regex, collapse = '", "'), '"'
     )
+    stop(duplicate_message)
   }
   # Generate merged and sorted postcodes
   regex_postcodes <- postcode_list |>
@@ -238,37 +213,31 @@ get_point_postcodes <- function(
   postcodes, lat, long, crs, distance, units
 ) {
   # Check arguments
-  stopifnot(sf::st_crs(postcodes)[['input']] == 'EPSG:4326')
-  stopifnot('osgrdind' %in% colnames(postcodes))
   stopifnot(length(lat) == 1)
   stopifnot(is.numeric(lat))
   stopifnot(length(long) == 1)
   stopifnot(is.numeric(long))
   stopifnot(length(crs) == 1)
-  stopifnot(is.integer(crs))
-  stopifnot(sf::st_can_transform(src = crs, dst = 4326))
+  stopifnot((crs %% 1) == 0)
+  stopifnot(sf::st_can_transform(crs, sf::st_crs(postcodes)))
   stopifnot(length(distance) == 1)
   stopifnot(is.numeric(distance))
+  stopifnot(distance > 0)
   stopifnot(length(units) == 1)
   stopifnot(units %in% c('m', 'km', 'mi'))
   # Create distance and point
-  max_distance = units::as_units(distance, units)
+  max_distance <- units::as_units(distance, units)
   point <- sf::st_sfc(
     sf::st_point(c(long, lat))
-  )
-  sf::st_crs(point) <- crs
-  if (crs != 4326) {
-    point <- sf::st_transform(point, crs = crs)
-  }
+  ) |>
+    sf::st_set_crs(crs) |>
+    sf::st_transform(crs = sf::st_crs(postcodes))
   # Create filter, apply and return
-  osgrd_postcodes <- dplyr::filter(postcodes, osgrdind < 9)
-  distance <- sf::st_distance(osgrd_postcodes, point)[, 1, drop = TRUE]
-  filtered_postcodes <- osgrd_postcodes[
-    distance <= max_distance, , drop = FALSE
+  postcode_distance <- sf::st_distance(postcodes, point)[, 1, drop = TRUE]
+  filtered_postcodes <- postcodes[
+    postcode_distance <= max_distance, , drop = FALSE
   ] |>
     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
-  # Check postcodes and return
-  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
 
@@ -284,17 +253,18 @@ get_polygon_postcodes <- function(
   postcodes, coordinate_str, crs
 ) {
   # Check arguments
-  stopifnot(sf::st_crs(postcodes)[['input']] == 'EPSG:4326')
-  stopifnot(!is.null(coordinate_str))
+  stopifnot(length(crs) == 1)
+  stopifnot((crs %% 1) == 0)
+  stopifnot(sf::st_can_transform(crs, sf::st_crs(postcodes)))
   # Convert coordinates to a character vector
   polygon <- create_polygon_from_str(
     coordinate_str = coordinate_str,
     in_crs = crs,
-    out_crs = 4326
+    out_crs = sf::st_crs(postcodes)
   )
   # Get postcodes
   filtered_postcodes <- sf::st_filter(
-    x = dplyr::filter(postcodes, postcodes$osgrdind < 9),
+    x = postcodes,
     y = polygon
   ) |>
     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
@@ -302,7 +272,6 @@ get_polygon_postcodes <- function(
   if (nrow(filtered_postcodes) == 0) {
     stop('Coordinates did not identify any postcodes')
   }
-  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
   return(filtered_postcodes)
 }
 
@@ -320,7 +289,7 @@ get_ward_postcodes <- function(
   stopifnot('osward' %in% colnames(postcodes))
   stopifnot(class(wards) == 'character')
   stopifnot(length(wards) >= 1)
-  stopifnot(!any(duplicated(wards)))
+  stopifnot(all(!duplicated(wards)))
   stopifnot(all(wards %in% postcodes$osward))
   # Get postcodes
   filtered_postcodes <- postcodes[
@@ -328,8 +297,9 @@ get_ward_postcodes <- function(
   ] |>
     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
-  stopifnot(nrow(filtered_postcodes) > 0)
-  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
+  if (any(duplicated(filtered_postcodes$pcds))) {
+    stop('Wards identified duplicate postcodes')
+  }
   return(filtered_postcodes)
 }
 
@@ -356,8 +326,9 @@ get_laua_postcodes <- function(
   ] |>
     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
-  stopifnot(nrow(filtered_postcodes) > 0)
-  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
+  if (any(duplicated(filtered_postcodes$pcds))) {
+    stop('laua identified duplicate postcodes')
+  }
   return(filtered_postcodes)
 }
 
@@ -383,8 +354,9 @@ get_county_postcodes <- function(
   ] |>
     dplyr::arrange(order_postcodes(pcds, level = 'complete'))
   # Check postcodes and return
-  stopifnot(nrow(filtered_postcodes) > 0)
-  stopifnot(!base::any(base::duplicated(filtered_postcodes$pcds)))
+  if (any(duplicated(filtered_postcodes$pcds))) {
+    stop('counties identified duplicate postcodes')
+  }
   return(filtered_postcodes)
 }
 
@@ -473,6 +445,9 @@ get_postcodes_from_definition_list <- function(
   postcodes, definition_list
 ) {
   # Check names
+  stopifnot('sfc_POINT' %in% base::attributes(sf::st_geometry(postcodes))$class)
+  stopifnot('pcds' %in% colnames(postcodes))
+  stopifnot(all(!duplicated(postcodes$pcds)))
   stopifnot(!is.null(names(definition_list)))
   stopifnot(all(!duplicated(names(definition_list))))
   # Select postcodes
