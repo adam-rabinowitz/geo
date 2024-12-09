@@ -7,7 +7,7 @@ which_unique_max <- function(values) {
   max_value <- max(values)
   max_indices <- which(values == max_value)
   if (length(max_indices) != 1) {
-    stop('failure to find max value')
+    stop('failure to find unique max value')
   }
   return(max_indices)
 }
@@ -25,10 +25,16 @@ city_definitions <- yaml::read_yaml(
 )
 stopifnot(all(sapply(city_definitions, '[[', 'crs') == 4326))
 # Read in postcode data
+postcode_cols <- readr::cols_only(
+  pcds = readr::col_character(),
+  doterm = readr::col_character(),
+  osgrdind = readr::col_integer(),
+  lat = readr::col_double(),
+  long = readr::col_double()
+)
 postcodes <- readr::read_csv(
   '~/beauclair/data/ONSPD/ONSPD_MAY_2024/Data/ONSPD_MAY_2024_UK.csv.gz',
-  progress=F, show_col_types = FALSE,
-  col_select=c(pcds, doterm, osgrdind, lat, long)
+  col_types = postcode_cols, progress = FALSE
 ) |>
   dplyr::mutate(
     doterm = as.Date(paste0(doterm, '01'), '%Y%m%d')
@@ -47,7 +53,8 @@ city_polygons <- lapply(
   function(definition) {
     geo:::create_polygon_from_str(
       coordinate_str = definition$coordinates,
-      crs = definition$crs
+      in_crs = definition$crs,
+      out_crs = 4326
     ) |>
       sf::st_make_valid()
   }
@@ -82,7 +89,15 @@ city_postcode_tb <- dplyr::tibble(
   city = city_sfc$city[city_postcode_assignment],
   postcode = city_postcodes$pcds
 )
-stopifnot(!any(duplicated(city_postcode_tb$postcode)))
+stopifnot(all(!duplicated(city_postcode_tb$postcode)))
+# Add other postcodes
+city_postcode_complete_tb <- dplyr::bind_rows(
+  city_postcode_tb,
+  dplyr::tibble(
+    'city' = 'Unassigned',
+    'postcode' = setdiff(postcodes$pcds, city_postcode_tb$postcode)
+  )
+)
 
 ###############################################################################
 ## Get customer postcodes
@@ -123,3 +138,52 @@ customer_sector_tb <- customer_postcode_tb |>
     .by = sector
   ) |>
   dplyr::select(city, sector)
+stopifnot(all(!duplicated(customer_sector_tb$sector)))
+# Add other postal sectors
+customer_sector_complete_tb <- dplyr::bind_rows(
+  customer_sector_tb,
+  dplyr::tibble(
+    'city' = 'Unassigned',
+    'sector' = setdiff(
+      truncate_postcodes(
+        postcodes$pcds, level = 'sector', sort = FALSE, unique = TRUE
+      ),
+      customer_sector_tb$sector
+    )
+  )
+)
+
+###############################################################################
+## Create and save outputs
+###############################################################################
+# Create retail areas
+city_postcode_complete_tb |>
+  dplyr::mutate(
+    id = 'gb_benchmark_update',
+    project = 'gb_benchmark_update'
+  ) |>
+  dplyr::select(
+    id, project, retail_area = city, postcode
+  ) |>
+  readr::write_csv(
+    '~/Desktop/gb_benchmark_query/gb_benchmark_update_retail_postcodes.csv',
+    progress = FALSE
+  )
+# Create customer areas
+customer_sector_complete_tb |>
+  dplyr::mutate(
+    id = 'gb_benchmark_update',
+    project = 'gb_benchmark_update'
+  ) |>
+  dplyr::select(
+    id, project, customer_area = city, postcode = sector
+  ) |>
+  readr::write_csv(
+    '~/Desktop/gb_benchmark_query/gb_benchmark_update_customer_postcodes.csv',
+    progress = FALSE
+  )
+
+
+
+
+
