@@ -472,16 +472,20 @@ get_postcodes_from_definition <- function(
 get_postcodes_from_definition_list <- function(
   postcodes, definition_list
 ) {
-  # Get list of postcodes from definitions
-  selected_postcodes <- list()
-  for (area in names(definition_list)) {
-    message(area)
-    # Get postcode from definition
-    selected_postcodes[[area]] <- get_postcodes_from_definition(
-      postcodes = postcodes,
-      definition = definition_list[[area]]
-    )
-  }
+  # Check names
+  stopifnot(!is.null(names(definition_list)))
+  stopifnot(all(!duplicated(names(definition_list))))
+  # Select postcodes
+  selected_postcodes <- purrr::imap(
+    definition_list,
+    function(definition, area) {
+      message(area)
+      get_postcodes_from_definition(
+        postcodes = postcodes,
+        definition = definition
+      )
+    }
+  )
   return(selected_postcodes)
 }
 
