@@ -1,3 +1,11 @@
+#' Create polygon from str
+#' 
+#' Creates a polygon from a string listing polgon points
+#' 
+#' @param coordinate_str A string of the polygon points
+#' @param in_crs CRS of the input points
+#' @param out_crs CRS of the output polygon
+#' @returns A SFC object containing the polygon
 create_polygon_from_str <- function(
   coordinate_str, in_crs, out_crs = 4326
 ) {
@@ -22,11 +30,10 @@ create_polygon_from_str <- function(
     base::strsplit(split = ',') |>
     base::lapply(as.numeric) |>
     base::lapply(sf::st_point) |>
-    sf::st_sfc(crs = crs) |>
+    sf::st_sfc(crs = in_crs) |>
     sf::st_combine() |>
     sf::st_cast('LINESTRING') |>
     sf::st_cast('POLYGON') |>
-    sf::st_transform(crs = in_crs) |>
     sf::st_make_valid()
   # Convert polygon crs to 4326
   if (in_crs != out_crs) {
@@ -37,6 +44,12 @@ create_polygon_from_str <- function(
   return(polygon)
 }
 
+#' Create str from polygon
+#' 
+#' Creates a string of coordinates from an SFC polygon
+#' 
+#' @param polygon A SFC object containing the polygon
+#' @returns A list containing the coordinate string and the CRS
 create_str_from_polygon <- function(
   polygon
 ) {
@@ -53,7 +66,7 @@ create_str_from_polygon <- function(
   )
   # Create and return string
   output <- list(
-    'coordinates' = coordinate_str, 
+    'coordinate_str' = coordinate_str, 
     'crs' = crs
   )
   return(output)
