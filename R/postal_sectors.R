@@ -199,20 +199,3 @@ assign_sector_to_area <- function(
   )
   return(intersect_tbl)
 }
-
-# ref_postcodes <- read_ons_postcodes(
-#   path = '~/beauclair/data/ONSPD/ONSPD_AUG_2023_UK/Data/ONSPD_AUG_2023_UK.csv.gz',
-#   rm_terminated = T, rm_nogrid = F
-# ) |>
-#   dplyr::pull('pcds')
-# manchester_retail_postcodes <- readr::read_csv(
-#   '~/beauclair/city_data/Manchester/original_imfoco_postcodes/Manchester_Cities.csv',
-#   progress = F, show_col_types = F
-# )
-# 
-# x <- find_reference_sector_coverage(
-#   query_postcodes = manchester_retail_postcodes$postcode,
-#   query_groups = manchester_retail_postcodes$city,
-#   ref_postcodes = ref_postcodes
-# )
-
