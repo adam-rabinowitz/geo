@@ -1,31 +1,51 @@
-check_postcode_identity <- function(
-  path1, path2    
+#' Check postcode intersect
+#' 
+#' Check similarity between two postcode tables
+#' 
+#' @param postcodes1 Table containing 1st set of postcodes
+#' @param postcodes2 Table containing 2nd set of postcodes
+#' @param id_cols Grouping columns within postcode tables
+#' @param postcode_col Column containing postcodes
+#' @returns Table containing postcode intersect by grouping column
+#' @export
+check_postcode_intersect <- function(
+  postcodes1, postcodes2, id_cols, postcode_col = 'postcode'   
 ) {
-  # Read dara
-  data1 <- readr::read_csv(path1, progress = F, show_col_types = F)
-  data2 <- readr::read_csv(path2, progress = F, show_col_types = F)
-  # Check column names
-  stopifnot(identical(colnames(data1), colnames(data2)))
-  stopifnot(ncol(data1) == 3)
-  stopifnot('postcode' %in% colnames(data1))
-  stopifnot('project' %in% colnames(data1))
-  # Check project identiity
-  stopifnot(length(unique(data1$project)) == 1)
-  stopifnot(length(unique(data2$project)) == 1)
-  stopifnot(data1$project[1] == data2$project[1])
-  # Split postcode by id
-  id_col <- setdiff(colnames(data1), c('project', 'postcode'))
-  list1 <- split(data1$postcode, data1[[id_col]])
-  list2 <- split(data2$postcode, data2[[id_col]])
-  # Check identity
-  stopifnot(identical(names(list1), names(list2)))
-  for (id in names(list1)) {
-    stopifnot(setequal(list1[[id]], list2[[id]]))
-  }
-  return(TRUE)
+  # Check columns
+  all_cols <- c(id_cols, postcode_col)
+  stopifnot(all(all_cols %in% colnames(postcodes1)))
+  #stopifnot(all(!duplicated(postcodes1[, all_cols]))) # Uncomment in future
+  stopifnot(all(all_cols %in% colnames(postcodes2)))
+  #stopifnot(all(!duplicated(postcodes1[, all_cols]))) # Uncomment in future
+  # Merge data, find intersect and return
+  postcode_intersect <- dplyr::full_join(
+    postcodes1 |>
+      dplyr::select(dplyr::all_of(all_cols)) |>
+      dplyr::distinct() |> # Remove this when updating
+      dplyr::mutate(present1 = TRUE),
+    postcodes2 |>
+      dplyr::select(dplyr::all_of(all_cols)) |>
+      dplyr::distinct() |> # Remove this when updating
+      dplyr::mutate(present2 = TRUE),
+    by = all_cols
+  ) |>
+    # Replace NA with false
+    dplyr::mutate(
+      dplyr::across(
+        c(present1, present2),
+        function(z) {ifelse(is.na(z), FALSE, z)}
+      )
+    ) |>
+    # Count number of postcodes and intersect
+    dplyr::summarise(
+      n1 = sum(present1),
+      n2 = sum(present2),
+      intersect = sum(present1 & present2),
+      .by = dplyr::all_of(id_cols)
+    ) |>
+    # Determine identical
+    dplyr::mutate(
+      identical = (n1 == n2) & (n1 == intersect)
+    )
+  return(postcode_intersect)
 }
-
-path1 <- '~/beauclair/city_data/region_definitions/postcode_data/sunderland_retail_postcodes.csv'
-path2 <- '~/beauclair/monthly_data/formatted_input/2024_02/postcodes/sunderland_retail_postcodes.csv'
-check_identity(path1, path2)
-
