@@ -290,7 +290,14 @@ get_ward_postcodes <- function(
   stopifnot(class(wards) == 'character')
   stopifnot(length(wards) >= 1)
   stopifnot(all(!duplicated(wards)))
-  stopifnot(all(wards %in% postcodes$osward))
+  if (!all(wards %in% postcodes$osward)) {
+    missing_wards <- setdiff(wards, postcodes$osward)
+    missing_message <- paste(
+      'the following wards are missing:',
+      paste(missing_wards, collapse = ', ')
+    )
+    stop(missing_message)
+  }
   # Get postcodes
   filtered_postcodes <- postcodes[
     postcodes$osward %in% wards, , drop = FALSE
@@ -319,7 +326,14 @@ get_laua_postcodes <- function(
   stopifnot(class(laua) == 'character')
   stopifnot(length(laua) >= 1)
   stopifnot(!any(duplicated(laua)))
-  stopifnot(all(laua %in% postcodes$oslaua))
+  if (!all(laua %in% postcodes$oslaua)) {
+    missing_laua <- setdiff(laua, postcodes$oslaua)
+    missing_message <- paste(
+      'the following laua are missing:',
+      paste(missing_laua, collapse = ', ')
+    )
+    stop(missing_message)
+  }
   # Get postcodes
   filtered_postcodes <- postcodes[
     postcodes$oslaua %in% laua, , drop = FALSE
@@ -347,7 +361,14 @@ get_county_postcodes <- function(
   stopifnot(class(counties) == 'character')
   stopifnot(length(counties) >= 1)
   stopifnot(!any(duplicated(counties)))
-  stopifnot(all(counties %in% postcodes$oscty))
+  if (!all(counties %in% postcodes$oscty)) {
+    missing_counties <- setdiff(counties, postcodes$oscty)
+    missing_message <- paste(
+      'the following counties are missing:',
+      paste(missing_counties, collapse = ', ')
+    )
+    stop(missing_message)
+  }
   # Get postcodes
   filtered_postcodes <- postcodes[
     postcodes$oscty %in% counties, , drop = FALSE
