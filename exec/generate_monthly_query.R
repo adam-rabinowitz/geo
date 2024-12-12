@@ -25,8 +25,6 @@ yaml_files <- list(
   'Watford' = '~/beauclair/city_data/region_definitions/yaml_definitions/watford_regions.yaml',
   'York' = '~/beauclair/city_data/region_definitions/yaml_definitions/york_regions.yaml'
 )
-postcode_points_path <- '~/beauclair/data/ONSPD/ONSPD_NOV_2024/processed_postcodes/jan22_nov24_postcode_points_4326.yaml'
-postcode_voronoi_path <- '~/beauclair/data/ONSPD/ONSPD_NOV_2024/processed_postcodes/jan22_nov24_postcode_voronoi_4326.yaml'
 month_range <- as.Date(c('2022-01-01', '2024-11-01'))
 pull_id <- paste(c('BID', format(month_range, '%b%y')), collapse = '_')
 months_start <- seq.Date(
@@ -36,7 +34,6 @@ months_end <- lubridate::ceiling_date(months_start, unit = 'month') - 1
 if (!dir.exists(postcode_dir)) {
   dir.create(postcode_dir)
 }
-crs <- 4326
 
 ###############################################################################
 ## Create postcode data
