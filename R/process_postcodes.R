@@ -194,46 +194,32 @@ generate_pull_data <- function(
 ) {
   # Read yaml
   yaml <- yaml::read_yaml(yaml_path)
-  # Read retail postcodes
-  message('reading retail postcodes')
-  all_postcodes <- read_ons_postcodes(
-    path = yaml$retail_areas$postcodes$path,
-    rm_terminated = yaml$retail_areas$postcodes$rm_terminated,
-    rm_nogrid = yaml$retail_areas$postcodes$rm_nogrid
-  )
-  # Get retail postcodes
-  message('getting retail postcodes')
-  retail_postcode_list <- generate_postcode_list(
-    postcodes = all_postcodes,
-    definitions = yaml$retail_areas$definitions,
-    operations = yaml$retail_areas$operations,
-    areas = yaml$retail_areas$pull,
-    level = yaml$retail_areas$postcodes$level
-  )
-  identify_postcode_overlap(retail_postcode_list, raise_error = FALSE)
-  # Read customer postcodes
-  message('reading customer postcodes')
-  identical_postcodes <- base::identical(
-    yaml$retail_areas$postcodes[c('path', 'rm_terminated', 'rm_nogrid')],
-    yaml$customer_areas$postcodes[c('path', 'rm_terminated', 'rm_nogrid')]
-  )
-  if (!identical_postcodes) {
-    all_postcodes <- read_ons_postcodes(
-      path = yaml$customer_areas$postcodes$path,
-      rm_terminated = yaml$customer_areas$postcodes$rm_terminated,
-      rm_nogrid = yaml$customer_areas$postcodes$rm_nogrid
-    )
+  # Read postcodes
+  message('reading postcodes')
+  postcode_points <- readRDS(yaml$postcodes$point_path)
+  postcode_voronoi <- readRDS(yaml$postcodes$voronoi_path)
+  if (!identical(postcode_points$pcds, postcode_voronoi$pcds)) {
+    stop('postcode point and voronoi files do not match')
   }
-  # Get customer postcodes
-  message('getting customer postcodes')
-  customer_postcode_list <- generate_postcode_list(
-    postcodes = all_postcodes,
-    definitions = yaml$customer_areas$definitions,
-    operations = yaml$customer_areas$operations,
-    areas = yaml$customer_areas$pull,
-    level = yaml$customer_areas$postcodes$level
+  # Get retail postcodes
+  areas <- c('retail areas', 'customer areas')
+  stopifnot(all(areas %in% names(yaml)))
+  postcode_list <- lapply(
+    areas,
+    function(area) {
+      message(paste('generating', area))
+      # Get postcodes
+      postcode_list <- generate_postcode_list(
+        postcodes = postcode_points,
+        definitions = yaml[[area]]$definitions,
+        operations = yaml[[area]]$operations,
+        areas = yaml[[area]]$selected,
+        level = yaml[[area]]$level
+      )
+      # Identify overlap
+      identify_postcode_overlap(postcode_list, raise_error = FALSE)
+    }
   )
-  identify_postcode_overlap(customer_postcode_list, raise_error = FALSE)
   # Generate postcode table and return
   postcode_list <- list(
     'retail' = dplyr::tibble(
