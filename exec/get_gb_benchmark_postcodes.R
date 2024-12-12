@@ -17,8 +17,10 @@ which_unique_max <- function(values) {
 ###############################################################################
 # Set variables
 city_path <- '~/Desktop/cfc.yaml'
-postcode_path <- '~/beauclair/data/ONSPD/ONSPD_MAY_2024/Data/ONSPD_MAY_2024_UK.csv.gz'
+postcode_path <- '~/beauclair/data/ONSPD/ONSPD_NOV_2024/Data/ONSPD_NOV_2024_UK.csv.gz'
 earliest_termination <- as.Date('2022-01-01')
+id <- 'black_friday_62city_sales'
+project <- '62_cities'
 # Read in city data
 city_definitions <- yaml::read_yaml(
   '~/Desktop/cfc.yaml'
@@ -66,7 +68,7 @@ city_sfc <- sf::st_sf(
 stopifnot(all(sf::st_is_valid(city_sfc$geometry)))
 
 ###############################################################################
-## Get city postcodes
+## Get retail and customer postcodes
 ###############################################################################
 # Check overlaps
 city_intersects <- sf::st_intersects(
@@ -86,18 +88,12 @@ city_postcode_assignment <- sf::st_nearest_feature(
   city_postcodes, city_sfc
 )
 city_postcode_tb <- dplyr::tibble(
-  city = city_sfc$city[city_postcode_assignment],
+  id = id,
+  project = project,
+  retail_area = city_sfc$city[city_postcode_assignment],
   postcode = city_postcodes$pcds
 )
 stopifnot(all(!duplicated(city_postcode_tb$postcode)))
-# Add other postcodes
-city_postcode_complete_tb <- dplyr::bind_rows(
-  city_postcode_tb,
-  dplyr::tibble(
-    'city' = 'Unassigned',
-    'postcode' = setdiff(postcodes$pcds, city_postcode_tb$postcode)
-  )
-)
 
 ###############################################################################
 ## Get customer postcodes
