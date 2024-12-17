@@ -99,7 +99,7 @@ add_rest_of_gb <- function(
   # Check postcode list
   if(label %in% names(postcode_list)) {
     message <- paste0(
-      'Rest of GB label (', label, ') already exists in postcodes'
+      'Label (', label, ') already exists in postcodes'
     )
     stop(message)
   }
@@ -181,15 +181,70 @@ generate_postcode_list <- function(
   return(selected_postcodes)
 }
 
-#' Generate postcode output
+#' Get postcode polygons
+#' 
+#' Get plot data for postcodes from a list of areas
+#' @param postcode_list A list of postcodes
+#' @param voronoi A simple feature collection containing postcode voronoi
+#' @param crs Coordinate refrence system for postcodes
+#' @returns A simple feature collection containing polygons
+get_postcode_polygons <- function(
+  postcode_list, level, voronoi
+) {
+  # Get polygons for complete postcodes
+  if (level == 'complete') {
+    polygon_list <- lapply(
+      postcode_list,
+      function(z) {
+        voronoi$geometry[
+          match(z, voronoi$pcds)
+        ] |>
+          sf::st_union()
+      }
+    )
+    # Or get polygons for truncated postcodes
+  } else if (level == 'sector') {
+    level_split <- split(
+      voronoi$pcds,
+      truncate_postcodes(
+        voronoi$pcds,
+        level = 'sector',
+        sort = F,
+        unique = F
+      )
+    )
+    polygon_list <- lapply(
+      postcode_list,
+      function(z) {
+        voronoi$geometry[
+          match(unlist(level_split[z], use.names=F), voronoi$pcds)
+        ] |>
+          sf::st_union()
+      }
+    )
+  } else {
+    stop('unexpected postcode level')
+  }
+  # Merge polygons and retrun
+  area_polygons <- sf::st_sf(
+    area = factor(
+      names(polygon_list),
+      levels = names(polygon_list)
+    ),
+    geometry = do.call(c, polygon_list)
+  ) |>
+    dplyr::arrange(area)
+  return(area_polygons)
+}
+
+#' Generate postcode data
 #' 
 #' Function generates postcode tables and postcode plot data
 #' 
-#' @param postcodes ONS postcodes
 #' @param yaml_path Path to YAML defining areas
 #' @returns A list containing postcode tables and postcode plot data
 #' @export
-generate_pull_data <- function(
+generate_postcode_data <- function(
   yaml_path
 ) {
   # Read yaml
@@ -204,7 +259,7 @@ generate_pull_data <- function(
   # Get retail postcodes
   areas <- c('retail areas', 'customer areas')
   stopifnot(all(areas %in% names(yaml)))
-  postcode_list <- lapply(
+  output_list <- lapply(
     areas,
     function(area) {
       message(paste('generating', area))
@@ -218,139 +273,85 @@ generate_pull_data <- function(
       )
       # Identify overlap
       identify_postcode_overlap(postcode_list, raise_error = FALSE)
+      # Generate postcode table
+      area_postcodes <- tibble::tibble(
+        area = base::rep(
+          names(postcode_list), sapply(postcode_list, length)
+        ),
+        postcode = base::unlist(postcode_list)
+      )
+      # Generate output
+      area_voronoi <- get_postcode_polygons(
+        postcode_list = postcode_list,
+        level = yaml[[area]]$level,
+        voronoi = postcode_voronoi
+      )
+      # Check output and return
+      stopifnot(
+        identical(unique(area_postcodes$area), levels(area_voronoi$area))
+      )
+      area_output <- list(
+        postcodes = area_postcodes, voronoi = area_voronoi
+      )
+      return(area_output)
     }
   )
-  # Generate postcode table and return
-  postcode_list <- list(
-    'retail' = dplyr::tibble(
-      'area' = base::rep(
-        names(retail_postcode_list),
-        sapply(retail_postcode_list, length)
-      ),
-      'postcode' = base::unlist(
-        retail_postcode_list, use.names = FALSE
-      )
-    ),
-    'customer' = dplyr::tibble(
-      'area' = base::rep(
-        names(customer_postcode_list),
-        sapply(customer_postcode_list, length)
-      ),
-      'postcode' = base::unlist(
-        customer_postcode_list, use.names = FALSE
-      )
-    )
-  )
-  return(postcode_list)
+  names(output_list) <- gsub(' ', '_', areas)
+  return(output_list)
 }
 
-#' Get postcode polygons
-#' 
-#' Get plot data for postcodes from a list of areas
-#' @param postcode_list A list of postcodes
-#' @param voronoi A simple feature collection containing postcode voronoi
-#' @param crs Coordinate refrence system for postcodes
-#' @returns A simple feature collection containing polygons
-get_postcode_polygons <- function(
-  postcode_list, voronoi, crs
-) {
-  # Get postcode level
-  level <- identify_postcode_level(unlist(postcode_list, use.names = F))
-  # Get polygons for complete postcodes
-  if (level == 'complete') {
-    polygon_list <- lapply(
-      postcode_list,
-      function(z) {
-        voronoi$geometry[
-          match(z, voronoi$pcds)
-        ] |>
-          sf::st_union()
-      }
-    )
-  # Or get polygons for truncated postcodes
-  } else {
-    level_split <- split(
-      voronoi$pcds,
-      truncate_postcodes(
-        voronoi$pcds,
-        level = level,
-        sort = F,
-        unique = F
-      )
-    )
-    polygon_list <- lapply(
-      postcode_list,
-      function(z) {
-        voronoi$geometry[
-          match(unlist(level_split[z], use.names=F), voronoi$pcds)
-        ] |>
-          sf::st_union()
-      }
-    )
-  }
-  # Merge polygons and retrun
-  area_polygons <- sf::st_sf(
-    area = factor(
-      names(polygon_list),
-      levels = names(polygon_list)
-    ),
-    geometry = do.call(c, polygon_list)
-  ) |>
-    sf::st_transform(crs) |>
-    dplyr::arrange(area)
-  return(area_polygons)
-}
 
-#' Generate polygon plot data
-#' 
-#' Function generates postcode tables and postcode plot data
-#' 
-#' @param retail_postcodes Table containg retail postcodes
-#' @param customer_postcodes Table containing customer postcodes
-#' @param voronoi Simple feature collection containing postcode voronoi
-#' @param crs Coordinate reference system for output polygons
-#' @returns A list containing polygons of customer and retail areas
-#' @export
-generate_polygon_plot_data <- function(
-  retail_postcodes, customer_postcodes, voronoi, crs
-) {
-  # Check data
-  stopifnot(identical(
-    colnames(retail_postcodes),
-    c('project', 'area', 'postcode')
-  ))
-  stopifnot(identical(
-    colnames(customer_postcodes),
-    c('project', 'area', 'postcode')
-  ))
-  stopifnot(length(unique(retail_postcodes$project)) == 1)
-  stopifnot(length(unique(customer_postcodes$project)) == 1)
-  stopifnot(retail_postcodes$project[1] == customer_postcodes$project[1])
-  # Generate postcode lists and voronoi
-  polygons <- list(
-    retail = split(
-      retail_postcodes$postcode,
-      factor(
-        retail_postcodes$area,
-        base::unique(retail_postcodes$area)
-      )
-    ) |>
-      get_postcode_polygons(
-        voronoi = voronoi, crs = crs
-      ),
-    customer = customer_list <- split(
-      customer_postcodes$postcode,
-      factor(
-        customer_postcodes$area,
-        base::unique(customer_postcodes$area)
-      )
-    ) |>
-      get_postcode_polygons(
-        voronoi = voronoi, crs = crs
-      )
-  )
-  return(polygons)
-}
+
+#' #' Generate polygon plot data
+#' #' 
+#' #' Function generates postcode tables and postcode plot data
+#' #' 
+#' #' @param retail_postcodes Table containg retail postcodes
+#' #' @param customer_postcodes Table containing customer postcodes
+#' #' @param voronoi Simple feature collection containing postcode voronoi
+#' #' @param crs Coordinate reference system for output polygons
+#' #' @returns A list containing polygons of customer and retail areas
+#' #' @export
+#' generate_polygon_plot_data <- function(
+#'   retail_postcodes, customer_postcodes, voronoi, crs
+#' ) {
+#'   # Check data
+#'   stopifnot(identical(
+#'     colnames(retail_postcodes),
+#'     c('project', 'area', 'postcode')
+#'   ))
+#'   stopifnot(identical(
+#'     colnames(customer_postcodes),
+#'     c('project', 'area', 'postcode')
+#'   ))
+#'   stopifnot(length(unique(retail_postcodes$project)) == 1)
+#'   stopifnot(length(unique(customer_postcodes$project)) == 1)
+#'   stopifnot(retail_postcodes$project[1] == customer_postcodes$project[1])
+#'   # Generate postcode lists and voronoi
+#'   polygons <- list(
+#'     retail = split(
+#'       retail_postcodes$postcode,
+#'       factor(
+#'         retail_postcodes$area,
+#'         base::unique(retail_postcodes$area)
+#'       )
+#'     ) |>
+#'       get_postcode_polygons(
+#'         voronoi = voronoi, crs = crs
+#'       ),
+#'     customer = customer_list <- split(
+#'       customer_postcodes$postcode,
+#'       factor(
+#'         customer_postcodes$area,
+#'         base::unique(customer_postcodes$area)
+#'       )
+#'     ) |>
+#'       get_postcode_polygons(
+#'         voronoi = voronoi, crs = crs
+#'       )
+#'   )
+#'   return(polygons)
+#' }
 
 # # Create glasgow plot data
 # manchester_plot_data <- generate_polygon_plot_data(
