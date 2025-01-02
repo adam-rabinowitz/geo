@@ -136,13 +136,110 @@ get_selected_sectors <- function(
     stop(missing_message)
   }
   # Select postcodes
-  present_indices <- selected_indices[!is.na(selected_indices)]
-  sector_postcodes <- sector_list[present_indices] |>
+  sector_postcodes <- sector_list[selected_indices] |>
     base::unlist(use.names = FALSE) |>
     sort_postcodes()
   # Select data and return
   selected_postcodes <- postcodes[
     match(sector_postcodes, postcodes$pcds),
+  ]
+  return(selected_postcodes)
+}
+
+#' Get selected districts
+#' 
+#' Get directly selected postal districts
+#' 
+#' @param postcodes ONS postcodes
+#' @param selected Character vector of postal districts
+#' @return sf object containing the selected postcodes
+get_selected_districts <- function(
+  postcodes, selected
+) {
+  # Check arguments
+  stopifnot(!is.null(selected))
+  stopifnot(length(selected) > 0)
+  check_postcodes(selected, level = 'district')
+  # Process duplicated postcodes
+  if (any(base::duplicated(selected))) {
+    # Report duplicated postcodes
+    duplicate_selections <- base::unique(selected[base::duplicated(selected)])
+    duplicated_message <- paste0(
+      "The following selected postal districts are duplicated: '",
+      paste(duplicate_selections, collapse = "', '"), "'"
+    )
+    stop(duplicated_message)
+  }
+  # Find postcodes
+  district_list <- split(
+    postcodes$pcds, get_postcode_districts(postcodes$pcds)
+  )
+  selected_indices <- match(selected, names(district_list))
+  # Report missing postcodes
+  missing <- base::which(base::is.na(selected_indices))
+  if (length(missing) > 0) {
+    missing_message <- paste0(
+      "The following selected postal districts are missing: '",
+      paste(selected[missing], collapse="', '"), "'"
+    )
+    stop(missing_message)
+  }
+  # Select postcodes
+  district_postcodes <- district_list[selected_indices] |>
+    base::unlist(use.names = FALSE) |>
+    sort_postcodes()
+  # Select data and return
+  selected_postcodes <- postcodes[
+    match(district_postcodes, postcodes$pcds),
+  ]
+  return(selected_postcodes)
+}
+
+#' Get selected areas
+#' 
+#' Get directly selected postal areas
+#' 
+#' @param postcodes ONS postcodes
+#' @param selected Character vector of postal areas
+#' @return sf object containing the selected postcodes
+get_selected_areas <- function(
+  postcodes, selected
+) {
+  # Check arguments
+  stopifnot(!is.null(selected))
+  stopifnot(length(selected) > 0)
+  check_postcodes(selected, level = 'area')
+  # Process duplicated postcodes
+  if (any(base::duplicated(selected))) {
+    # Report duplicated postcodes
+    duplicate_selections <- base::unique(selected[base::duplicated(selected)])
+    duplicated_message <- paste0(
+      "The following selected postal areas are duplicated: '",
+      paste(duplicate_selections, collapse = "', '"), "'"
+    )
+    stop(duplicated_message)
+  }
+  # Find postcodes
+  area_list <- split(
+    postcodes$pcds, get_postcode_areas(postcodes$pcds)
+  )
+  selected_indices <- match(selected, names(area_list))
+  # Report missing postcodes
+  missing <- base::which(base::is.na(selected_indices))
+  if (length(missing) > 0) {
+    missing_message <- paste0(
+      "The following selected postal areas are missing: '",
+      paste(selected[missing], collapse="', '"), "'"
+    )
+    stop(missing_message)
+  }
+  # Select postcodes
+  area_postcodes <- area_list[selected_indices] |>
+    base::unlist(use.names = FALSE) |>
+    sort_postcodes()
+  # Select data and return
+  selected_postcodes <- postcodes[
+    match(area_postcodes, postcodes$pcds),
   ]
   return(selected_postcodes)
 }
@@ -407,6 +504,18 @@ get_postcodes_from_definition <- function(
       postcodes = postcodes,
       selected = definition$sectors
     )
+  # Get postal districts
+  } else if (definition$type == 'postal districts') {
+    selected_postcodes <- get_selected_sectors(
+      postcodes = postcodes,
+      selected = definition$districts
+    )
+  # Get postal areas
+  } else if (definition$type == 'postal areas') {
+    selected_postcodes <- get_selected_sectors(
+      postcodes = postcodes,
+      selected = definition$areas
+    )
   # Get postcodes defined by regex
   } else if (definition$type == 'regex') {
     selected_postcodes <- get_regex_postcodes(
@@ -430,7 +539,7 @@ get_postcodes_from_definition <- function(
       coordinate_str = definition$coordinates,
       crs = definition$crs
     )
-  # Get postcodes defined by laua
+  # Get postcodes defined by wards
   } else if (definition$type == 'wards') {
     selected_postcodes <- get_ward_postcodes(
       postcodes = postcodes,
