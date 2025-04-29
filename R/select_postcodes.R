@@ -506,13 +506,13 @@ get_postcodes_from_definition <- function(
     )
   # Get postal districts
   } else if (definition$type == 'postal districts') {
-    selected_postcodes <- get_selected_sectors(
+    selected_postcodes <- get_selected_districts(
       postcodes = postcodes,
       selected = definition$districts
     )
   # Get postal areas
   } else if (definition$type == 'postal areas') {
-    selected_postcodes <- get_selected_sectors(
+    selected_postcodes <- get_selected_areas(
       postcodes = postcodes,
       selected = definition$areas
     )
