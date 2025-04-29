@@ -204,8 +204,8 @@ get_postcode_polygons <- function(
     )
     # Or get polygons for truncated postcodes
   } else if (level == 'sector') {
-    level_split <- split(
-      voronoi$pcds,
+    voronoi_list <- split(
+      voronoi$geometry,
       truncate_postcodes(
         voronoi$pcds,
         level = 'sector',
@@ -216,9 +216,8 @@ get_postcode_polygons <- function(
     polygon_list <- lapply(
       postcode_list,
       function(z) {
-        voronoi$geometry[
-          match(unlist(level_split[z], use.names=F), voronoi$pcds)
-        ] |>
+        voronoi_list[z] |>
+          do.call(what = c) |>
           sf::st_union()
       }
     )
@@ -250,9 +249,10 @@ generate_postcode_data <- function(
   # Read yaml
   yaml <- yaml::read_yaml(yaml_path)
   # Read postcodes
+  message(paste0('\n', yaml$client))
   message('reading postcodes')
-  postcode_points <- readRDS(yaml$postcodes$point_path)
-  postcode_voronoi <- readRDS(yaml$postcodes$voronoi_path)
+  postcode_points <- readRDS(yaml$postcodes[['point path']])
+  postcode_voronoi <- readRDS(yaml$postcodes[['voronoi path']])
   if (!identical(postcode_points$pcds, postcode_voronoi$pcds)) {
     stop('postcode point and voronoi files do not match')
   }
@@ -266,10 +266,10 @@ generate_postcode_data <- function(
       # Get postcodes
       postcode_list <- generate_postcode_list(
         postcodes = postcode_points,
-        definitions = yaml[[area]]$definitions,
-        operations = yaml[[area]]$operations,
-        areas = yaml[[area]]$selected,
-        level = yaml[[area]]$level
+        definitions = yaml[[area]][['definitions']],
+        operations = yaml[[area]][['operations']],
+        areas = yaml[[area]][['selected']],
+        level = yaml[[area]][['postcode level']]
       )
       # Identify overlap
       identify_postcode_overlap(postcode_list, raise_error = FALSE)
@@ -283,7 +283,7 @@ generate_postcode_data <- function(
       # Generate output
       area_voronoi <- get_postcode_polygons(
         postcode_list = postcode_list,
-        level = yaml[[area]]$level,
+        level = yaml[[area]][['postcode level']],
         voronoi = postcode_voronoi
       )
       # Check output and return
