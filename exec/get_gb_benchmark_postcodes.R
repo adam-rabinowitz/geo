@@ -10,7 +10,7 @@ pull_id <- paste(
 )
 catchment_distance <- units::as_units(10, 'km')
 # Set paths
-city_path <- '~/Desktop/cfc.yaml'
+city_path <- 'data/sixty_two_cities.yaml'
 postcode_path <- '~/beauclair/data/ONS/ONSPD/ONSPD_NOV_2024/processed_postcodes/jan22_nov24_postcode_points_4326.rds'
 output_dir <- '~/beauclair/monthly_data/formatted_input/2025_01/queries'
 # Read in city and postcode data
