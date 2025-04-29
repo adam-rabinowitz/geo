@@ -1,55 +1,24 @@
 library(sf)
-
 ###############################################################################
-# Functions
-###############################################################################
-which_unique_max <- function(values) {
-  max_value <- max(values)
-  max_indices <- which(values == max_value)
-  if (length(max_indices) != 1) {
-    stop('failure to find unique max value')
-  }
-  return(max_indices)
-}
-
-###############################################################################
-## Read in data
+## Set path, variables and read in data
 ###############################################################################
 # Set variables
+start_date <- as.Date('2022-01-01')
+end_date <- as.Date('2025-01-01')
+pull_id <- paste(
+  'SixtyTwoCities', format(start_date, '%b%y'), format(end_date, '%b%y'), sep = '_'
+)
+catchment_distance <- units::as_units(10, 'km')
+# Set paths
 city_path <- '~/Desktop/cfc.yaml'
-postcode_path <- '~/beauclair/data/ONSPD/ONSPD_NOV_2024/Data/ONSPD_NOV_2024_UK.csv.gz'
-earliest_termination <- as.Date('2022-01-01')
-id <- 'black_friday_62city_sales'
-project <- '62_cities'
-# Read in city data
-city_definitions <- yaml::read_yaml(
-  '~/Desktop/cfc.yaml'
-)
+postcode_path <- '~/beauclair/data/ONS/ONSPD/ONSPD_NOV_2024/processed_postcodes/jan22_nov24_postcode_points_4326.rds'
+output_dir <- '~/beauclair/monthly_data/formatted_input/2025_01/queries'
+# Read in city and postcode data
+city_definitions <- yaml::read_yaml(city_path)
 stopifnot(all(sapply(city_definitions, '[[', 'crs') == 4326))
-# Read in postcode data
-postcode_cols <- readr::cols_only(
-  pcds = readr::col_character(),
-  doterm = readr::col_character(),
-  osgrdind = readr::col_integer(),
-  lat = readr::col_double(),
-  long = readr::col_double()
-)
-postcodes <- readr::read_csv(
-  '~/beauclair/data/ONSPD/ONSPD_MAY_2024/Data/ONSPD_MAY_2024_UK.csv.gz',
-  col_types = postcode_cols, progress = FALSE
-) |>
-  dplyr::mutate(
-    doterm = as.Date(paste0(doterm, '01'), '%Y%m%d')
-  ) |>
-  dplyr::filter(
-    osgrdind < 9 &
-    lat < 99.9 &
-    (is.na(doterm) | (doterm >= earliest_termination))
-  ) |>
-  sf::st_as_sf(
-    coords = c('long', 'lat'), remove = TRUE, crs = 4326
-  )
-# Create city sfc
+postcodes <- readRDS(postcode_path)
+stopifnot(sf::st_crs(postcodes)$input == 'EPSG:4326')
+# Get polygons for each city
 city_polygons <- lapply(
   city_definitions,
   function(definition) {
@@ -61,48 +30,90 @@ city_polygons <- lapply(
       sf::st_make_valid()
   }
 )
-city_sfc <- sf::st_sf(
+# Create sfc for retail areas
+retail_sfc <- sf::st_sf(
   city = names(city_polygons),
   geometry = do.call(c, city_polygons)
 )
-stopifnot(all(sf::st_is_valid(city_sfc$geometry)))
+stopifnot(all(sf::st_is_valid(retail_sfc$geometry)))
+# Create sfc for customer catchment areas
+customer_sfc <- sf::st_buffer(
+  retail_sfc,
+  dist = catchment_distance
+)
 
 ###############################################################################
-## Get retail and customer postcodes
+## Generate months
 ###############################################################################
-# Check overlaps
-city_intersects <- sf::st_intersects(
-  city_sfc, sparse = T, remove_self = T, 
+# Find start and end of months
+months_start <- seq.Date(
+  from = start_date, to = end_date, by = 'month'
 )
-stopifnot(sum(sapply(city_intersects, length)) == 0)
-# Find city postcodes
-city_postcodes <- postcodes[
+stopifnot(all(lubridate::day(months_start) == 1))
+months_end <- lubridate::ceiling_date(months_start, unit = 'month') - 1
+# Create months table
+dates_table <- tibble::tibble(
+  id = pull_id,
+  start_date = months_start,
+  end_date = months_end,
+  group = months_start
+)
+# Save dates
+dates_path <- file.path(
+  output_dir,
+  paste0(pull_id, '_dates.csv')
+)
+readr::write_csv(
+  dates_table, dates_path, progress = FALSE
+)
+
+###############################################################################
+## Generate retail postcodes
+###############################################################################
+# Check retail overlaps
+retail_intersects <- sf::st_intersects(
+  retail_sfc, sparse = T, remove_self = T
+)
+stopifnot(sum(sapply(retail_intersects, length)) == 0)
+# Find retail overlaps
+retail_postcodes <- postcodes[
   sf::st_intersects(
     postcodes,
-    sf::st_union(city_sfc),
+    sf::st_union(retail_sfc),
     sparse = FALSE
   )[,1],
 ]
-# Create postcode table
-city_postcode_assignment <- sf::st_nearest_feature(
-  city_postcodes, city_sfc
+retail_postcode_intersect <- sf::st_intersects(
+  retail_sfc,
+  retail_postcodes,
+  sparse = TRUE
 )
-city_postcode_tb <- dplyr::tibble(
-  id = id,
-  project = project,
-  retail_area = city_sfc$city[city_postcode_assignment],
-  postcode = city_postcodes$pcds
+# Create retail postcode table
+retail_postcode_table <- purrr::imap(
+  retail_postcode_intersect,
+  function(postcode_indices, city_index) {
+    dplyr::tibble(
+      id = pull_id,
+      project = retail_sfc$city[city_index],
+      retail_area = retail_sfc$city[city_index],
+      postcode = retail_postcodes$pcds[postcode_indices]
+    )
+  }
+) |>
+  dplyr::bind_rows()
+# Save retail postcodes
+retail_path <- file.path(
+  output_dir,
+  paste0(pull_id, '_retail_postcodes.csv')
 )
-stopifnot(all(!duplicated(city_postcode_tb$postcode)))
+readr::write_csv(
+  retail_postcode_table, retail_path, progress = FALSE
+)
 
 ###############################################################################
-## Get customer postcodes
+## Generate customer postcodes
 ###############################################################################
-# Create customer data
-customer_sfc <- sf::st_buffer(
-  city_sfc, dist = units::as_units(5, 'km')
-)
-# Find city postcodes
+# Find customer overlaps
 customer_postcodes <- postcodes[
   sf::st_intersects(
     postcodes,
@@ -110,76 +121,38 @@ customer_postcodes <- postcodes[
     sparse = FALSE
   )[,1],
 ]
-# Find nearest
-customer_postcode_assignment <- sf::st_nearest_feature(
-  customer_postcodes, city_sfc
+customer_postcode_intersect <- sf::st_intersects(
+  customer_sfc,
+  customer_postcodes,
+  sparse = TRUE
 )
-# Create postcode table
-customer_postcode_tb <- dplyr::tibble(
-  city = city_sfc$city[customer_postcode_assignment],
-  postcode = customer_postcodes$pcds
-)
-# Create sector table
-customer_sector_tb <- customer_postcode_tb |>
-  dplyr::mutate(
-    sector = geo::truncate_postcodes(
-      postcode, level = 'sector', unique = F, sort = F)
-  ) |>
-  dplyr::summarise(
-    postcode_count = dplyr::n(),
-    .by = c(city, sector)
-  ) |>
-  dplyr::summarise(
-    city = city[which_unique_max(postcode_count)],
-    .by = sector
-  ) |>
-  dplyr::select(city, sector)
-stopifnot(all(!duplicated(customer_sector_tb$sector)))
-# Add other postal sectors
-customer_sector_complete_tb <- dplyr::bind_rows(
-  customer_sector_tb,
-  dplyr::tibble(
-    'city' = 'Unassigned',
-    'sector' = setdiff(
-      truncate_postcodes(
-        postcodes$pcds, level = 'sector', sort = FALSE, unique = TRUE
-      ),
-      customer_sector_tb$sector
+# Create retail postcode table
+customer_postcode_table <- purrr::imap(
+  customer_postcode_intersect,
+  function(postcode_indices, city_index) {
+    dplyr::tibble(
+      id = pull_id,
+      project = customer_sfc$city[city_index],
+      customer_area = customer_sfc$city[city_index],
+      postcode = customer_postcodes$pcds[postcode_indices]
     )
+  }
+) |>
+  dplyr::bind_rows() |>
+  dplyr::reframe(
+    postcode = geo::truncate_postcodes(
+      postcode, level = 'sector', unique = TRUE, sort = TRUE 
+    ),
+    .by = c(id, project, customer_area)
   )
+# Save retail postcodes
+customer_path <- file.path(
+  output_dir,
+  paste0(pull_id, '_customer_postcodes.csv')
 )
-
-###############################################################################
-## Create and save outputs
-###############################################################################
-# Create retail areas
-city_postcode_complete_tb |>
-  dplyr::mutate(
-    id = 'gb_benchmark_update',
-    project = 'gb_benchmark_update'
-  ) |>
-  dplyr::select(
-    id, project, retail_area = city, postcode
-  ) |>
-  readr::write_csv(
-    '~/Desktop/gb_benchmark_query/gb_benchmark_update_retail_postcodes.csv',
-    progress = FALSE
-  )
-# Create customer areas
-customer_sector_complete_tb |>
-  dplyr::mutate(
-    id = 'gb_benchmark_update',
-    project = 'gb_benchmark_update'
-  ) |>
-  dplyr::select(
-    id, project, customer_area = city, postcode = sector
-  ) |>
-  readr::write_csv(
-    '~/Desktop/gb_benchmark_query/gb_benchmark_update_customer_postcodes.csv',
-    progress = FALSE
-  )
-
-
+readr::write_csv(
+  customer_postcode_table, customer_path, progress = FALSE
+)
 
 
 
