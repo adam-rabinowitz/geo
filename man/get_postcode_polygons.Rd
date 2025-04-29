@@ -4,7 +4,7 @@
 \alias{get_postcode_polygons}
 \title{Get postcode polygons}
 \usage{
-get_postcode_polygons(postcode_list, voronoi, crs)
+get_postcode_polygons(postcode_list, level, voronoi)
 }
 \arguments{
 \item{postcode_list}{A list of postcodes}
